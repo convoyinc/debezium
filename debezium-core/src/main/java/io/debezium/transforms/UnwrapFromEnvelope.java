@@ -10,18 +10,27 @@ import java.util.Map;
 
 import io.debezium.config.EnumeratedValue;
 import io.debezium.data.Envelope;
+import org.apache.kafka.common.cache.Cache;
+import org.apache.kafka.common.cache.LRUCache;
+import org.apache.kafka.common.cache.SynchronizedCache;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.ConnectRecord;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.transforms.ExtractField;
 import org.apache.kafka.connect.transforms.InsertField;
 import org.apache.kafka.connect.transforms.Transformation;
+import org.apache.kafka.connect.transforms.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.config.Configuration;
 import io.debezium.config.Field;
+
+import static org.apache.kafka.connect.transforms.util.Requirements.requireMap;
+import static org.apache.kafka.connect.transforms.util.Requirements.requireStruct;
 
 /**
  * Debezium generates CDC (<code>Envelope</code>) records that are struct of values containing values
@@ -35,13 +44,16 @@ import io.debezium.config.Field;
  * <p>
  * The SMT by default drops the tombstone message created by Debezium and converts the delete message into
  * a tombstone message that can be dropped, too, if required.
- *
+ * <p>
+ * The SMT also has the option to insert fields from the original record's 'source' struct into the new 
+ * unwrapped record prefixed with "__" (for example __lsn in Postgres, or __file in MySQL)
  * @param <R> the subtype of {@link ConnectRecord} on which this transformation will operate
  * @author Jiri Pechanec
  */
 public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transformation<R> {
 
     final static String DEBEZIUM_OPERATION_HEADER_KEY = "__debezium-operation";
+    private static final String PURPOSE = "source field insertion";
 
     public static enum DeleteHandling implements EnumeratedValue {
         DROP("drop"),
@@ -153,6 +165,8 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
     private final InsertField<R> removedDelegate = new InsertField.Value<R>();
     private final InsertField<R> updatedDelegate = new InsertField.Value<R>();
 
+    private Cache<Schema, Schema> schemaUpdateCache;
+
     @Override
     public void configure(final Map<String, ?> configs) {
         final Configuration config = Configuration.from(configs);
@@ -194,6 +208,8 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
         delegateConfig.put("static.field", DELETED_FIELD);
         delegateConfig.put("static.value", "false");
         updatedDelegate.configure(delegateConfig);
+
+        schemaUpdateCache = new SynchronizedCache<>(new LRUCache<Schema, Schema>(16));
     }
 
     @Override
@@ -243,20 +259,8 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
                     return newRecord;
             }
         } else {
-            // Insert any source fields specified from the original record
-            for(String sourceField : addSourceFields) {
-                Struct source = ((Struct) record.value()).getStruct("source");
-                if(source.schema().field(sourceField) != null) {
-                    // Recreating this InsertField transform every time seems wildly inefficient, hopefully there's a better way
-                    Map<String, String> insertConfig = new HashMap<>();
-                    insertConfig.put("static.field", "__" + sourceField);
-                    insertConfig.put("static.value", source.getString(sourceField));
-                    InsertField<R> insertSourceField = new InsertField.Value<R>();
-                    insertSourceField.configure(insertConfig);
-                    newRecord = insertSourceField.apply(newRecord);
-                    insertSourceField.close();
-                }
-            }
+            // Add on any source fields from the original record to the new unwrapped record
+            newRecord = addSourceFields(addSourceFields, record, newRecord);
 
             // Handling insert and update records
             switch (handleDeletes) {
@@ -267,6 +271,84 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
                     return newRecord;
             }
         }
+    }
+
+    private R addSourceFields(String[] addSourceFields, R originalRecord, R unwrappedRecord) {
+        // Return unwrappedRecord if no source fields to add
+        if(addSourceFields.length == 0) {
+            return unwrappedRecord;
+        }
+        
+        if(unwrappedRecord.valueSchema() == null) {
+            return addSourceFieldsSchemaless(addSourceFields, originalRecord, unwrappedRecord);
+        } else {
+            return addSourceFieldsWithSchema(addSourceFields, originalRecord, unwrappedRecord);
+        }
+    }
+
+    private R addSourceFieldsSchemaless(String[] addSourceFields, R originalRecord, R unwrappedRecord) {
+        final Map<String, Object> value = requireMap(unwrappedRecord.value(), PURPOSE);
+        final Map<String, Object> updatedValue = new HashMap<>(value);
+        Struct source = ((Struct) originalRecord.value()).getStruct("source");
+        
+        // Add the new source fields to add
+        for(String sourceField : addSourceFields) {
+            String fieldValue = source.schema().field(sourceField) == null ? "" : source.getString(sourceField);
+            updatedValue.put("__" + sourceField, fieldValue);
+        }
+
+        return unwrappedRecord.newRecord(
+                unwrappedRecord.topic(), 
+                unwrappedRecord.kafkaPartition(), 
+                unwrappedRecord.keySchema(), 
+                unwrappedRecord.key(), 
+                null, 
+                updatedValue, 
+                unwrappedRecord.timestamp());
+    }
+
+    private R addSourceFieldsWithSchema(String[] addSourceFields, R originalRecord, R unwrappedRecord) {
+        final Struct value = requireStruct(unwrappedRecord.value(), PURPOSE);
+        Struct source = ((Struct) originalRecord.value()).getStruct("source");
+        
+        // Get the updated schema from the cache, or create and cache if it doesn't exist
+        Schema updatedSchema = schemaUpdateCache.get(value.schema());
+        if (updatedSchema == null) {
+            updatedSchema = makeUpdatedSchema(value.schema(), addSourceFields);
+            schemaUpdateCache.put(value.schema(), updatedSchema);
+        }   
+
+        // Create the updated struct
+        final Struct updatedValue = new Struct(updatedSchema);
+        for (org.apache.kafka.connect.data.Field field : value.schema().fields()) {
+            updatedValue.put(field.name(), value.get(field));
+        }
+        for(String sourceField : addSourceFields) {
+            String fieldValue = source.schema().field(sourceField) == null ? "" : source.getString(sourceField);
+            updatedValue.put("__" + sourceField, fieldValue);
+        }
+
+        return unwrappedRecord.newRecord(
+            unwrappedRecord.topic(), 
+            unwrappedRecord.kafkaPartition(), 
+            unwrappedRecord.keySchema(), 
+            unwrappedRecord.key(), 
+            updatedSchema, 
+            updatedValue, 
+            unwrappedRecord.timestamp());
+    }
+
+    private Schema makeUpdatedSchema(Schema schema, String[] addSourceFields) {
+        final SchemaBuilder builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct());
+        // Get fields from original schema
+        for (org.apache.kafka.connect.data.Field field : schema.fields()) {
+            builder.field(field.name(), field.schema());
+        }
+        // Add the requested source fields
+        for(String sourceField: addSourceFields) {
+            builder.field(sourceField, SchemaBuilder.string());
+        }
+        return builder.build();
     }
 
     @Override
