@@ -152,7 +152,7 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
             .withWidth(ConfigDef.Width.LONG)
             .withImportance(ConfigDef.Importance.LOW)
             .withDefault("")
-            .withDescription("Adds each field listed from the 'source' element of the payload if they exist, prefixed with __ "
+            .withDescription("Adds each field listed from the 'source' element of the payload, prefixed with __ "
                     + "Example: 'version,connector' would add __version and __connector fields");
 
     private boolean dropTombstones;
@@ -346,7 +346,7 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
         }
         // Add the requested source fields
         for(String sourceField: addSourceFields) {
-            builder.field(sourceField, SchemaBuilder.string());
+            builder.field("__" + sourceField, SchemaBuilder.string());
         }
         return builder.build();
     }

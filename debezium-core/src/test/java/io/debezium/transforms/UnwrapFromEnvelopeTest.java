@@ -307,7 +307,7 @@ public class UnwrapFromEnvelopeTest {
             final SourceRecord createRecord = createCreateRecord();
             final SourceRecord unwrapped = transform.apply(createRecord);
             
-            assertThat(((Struct) unwrapped.value()).schema().field("__nope")).isNull();
+            assertThat(((Struct) unwrapped.value()).getString("__nope")).isEqualTo("");
         }
     }  
 }
