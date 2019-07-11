@@ -83,7 +83,7 @@ public class UnwrapFromEnvelopeTest {
     private SourceRecord createCreateRecord() {
         final Schema recordSchema = SchemaBuilder.struct().field("id", SchemaBuilder.int8()).build();
         final Schema sourceSchema = SchemaBuilder.struct()
-                .field("lsn", SchemaBuilder.string())
+                .field("lsn", SchemaBuilder.int32())
                 .field("version", SchemaBuilder.string())
                 .build();
         Envelope envelope = Envelope.defineSchema()
@@ -95,7 +95,7 @@ public class UnwrapFromEnvelopeTest {
         final Struct source = new Struct(sourceSchema);
 
         before.put("id", (byte) 1);
-        source.put("lsn", "lsn!");
+        source.put("lsn", 1234);
         source.put("version", "version!");
         final Struct payload = envelope.create(before, source, System.nanoTime());
         return new SourceRecord(new HashMap<>(), new HashMap<>(), "dummy", envelope.schema(), payload);
@@ -279,7 +279,7 @@ public class UnwrapFromEnvelopeTest {
 
             final SourceRecord createRecord = createCreateRecord();
             final SourceRecord unwrapped = transform.apply(createRecord);
-            assertThat(((Struct) unwrapped.value()).getString("__lsn")).isEqualTo("lsn!");
+            assertThat(((Struct) unwrapped.value()).get("__lsn")).isEqualTo("1234");
         }
     }
 
@@ -292,7 +292,7 @@ public class UnwrapFromEnvelopeTest {
 
             final SourceRecord createRecord = createCreateRecord();
             final SourceRecord unwrapped = transform.apply(createRecord);
-            assertThat(((Struct) unwrapped.value()).getString("__lsn")).isEqualTo("lsn!");
+            assertThat(((Struct) unwrapped.value()).get("__lsn")).isEqualTo("1234");
             assertThat(((Struct) unwrapped.value()).getString("__version")).isEqualTo("version!");
         }
     }

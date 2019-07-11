@@ -294,7 +294,7 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
             updatedValue.put(field.name(), value.get(field));
         }
         for(String sourceField : addSourceFields) {
-            String fieldValue = source.schema().field(sourceField) == null ? "" : source.getString(sourceField);
+            String fieldValue = source.schema().field(sourceField) == null ? "" : source.get(sourceField).toString();
             updatedValue.put("__" + sourceField, fieldValue);
         }
 
