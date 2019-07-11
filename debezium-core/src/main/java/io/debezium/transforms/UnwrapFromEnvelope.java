@@ -134,10 +134,20 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
             .withDescription("Adds the operation {@link FieldName#OPERATION operation} as a header." +
                     "Its key is '" + DEBEZIUM_OPERATION_HEADER_KEY +"'");
 
+    private static final Field ADD_SOURCE_FIELDS = Field.create("add.source.fields")
+            .withDisplayName("Adds the specified fields from the 'source' field from the payload if they exist.")
+            .withType(ConfigDef.Type.LIST)
+            .withWidth(ConfigDef.Width.LONG)
+            .withImportance(ConfigDef.Importance.LOW)
+            .withDefault("")
+            .withDescription("Adds each field listed from the 'source' element of the payload if they exist, prefixed with __ "
+                    + "Example: 'version,connector' would add __version and __connector fields");
+
     private boolean dropTombstones;
     private boolean dropDeletes;
     private DeleteHandling handleDeletes;
     private boolean addOperationHeader;
+    private String[] addSourceFields;
     private final ExtractField<R> afterDelegate = new ExtractField.Value<R>();
     private final ExtractField<R> beforeDelegate = new ExtractField.Value<R>();
     private final InsertField<R> removedDelegate = new InsertField.Value<R>();
@@ -164,6 +174,8 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
         }
 
         addOperationHeader = config.getBoolean(OPERATION_HEADER);
+        addSourceFields = config.getString(ADD_SOURCE_FIELDS).isEmpty() ?
+            new String[0] :  config.getString(ADD_SOURCE_FIELDS).split(",");
 
         Map<String, String> delegateConfig = new HashMap<>();
         delegateConfig.put("field", "before");
@@ -216,7 +228,7 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
             logger.warn("Expected Envelope for transformation, passing it unchanged");
             return record;
         }
-        final R newRecord = afterDelegate.apply(record);
+        R newRecord = afterDelegate.apply(record);
         if (newRecord.value() == null) {
             // Handling delete records
             switch (handleDeletes) {
@@ -231,6 +243,21 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
                     return newRecord;
             }
         } else {
+            // Insert any source fields specified from the original record
+            for(String sourceField : addSourceFields) {
+                Struct source = ((Struct) record.value()).getStruct("source");
+                if(source.schema().field(sourceField) != null) {
+                    // Recreating this InsertField transform every time seems wildly inefficient, hopefully there's a better way
+                    Map<String, String> insertConfig = new HashMap<>();
+                    insertConfig.put("static.field", "__" + sourceField);
+                    insertConfig.put("static.value", source.getString(sourceField));
+                    InsertField<R> insertSourceField = new InsertField.Value<R>();
+                    insertSourceField.configure(insertConfig);
+                    newRecord = insertSourceField.apply(newRecord);
+                    insertSourceField.close();
+                }
+            }
+
             // Handling insert and update records
             switch (handleDeletes) {
                 case REWRITE:

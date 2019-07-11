@@ -30,6 +30,7 @@ public class UnwrapFromEnvelopeTest {
     private static final String DROP_TOMBSTONES = "drop.tombstones";
     private static final String HANDLE_DELETES = "delete.handling.mode";
     private static final String OPERATION_HEADER = "operation.header";
+    private static final String ADD_SOURCE_FIELDS = "add.source.fields";
 
     @Test
     public void testTombstoneDroppedByDefault() {
@@ -81,14 +82,22 @@ public class UnwrapFromEnvelopeTest {
 
     private SourceRecord createCreateRecord() {
         final Schema recordSchema = SchemaBuilder.struct().field("id", SchemaBuilder.int8()).build();
+        final Schema sourceSchema = SchemaBuilder.struct()
+                .field("lsn", SchemaBuilder.string())
+                .field("version", SchemaBuilder.string())
+                .build();
         Envelope envelope = Envelope.defineSchema()
                 .withName("dummy.Envelope")
                 .withRecord(recordSchema)
-                .withSource(SchemaBuilder.struct().build())
+                .withSource(sourceSchema)
                 .build();
         final Struct before = new Struct(recordSchema);
+        final Struct source = new Struct(sourceSchema);
+
         before.put("id", (byte) 1);
-        final Struct payload = envelope.create(before, null, System.nanoTime());
+        source.put("lsn", "lsn!");
+        source.put("version", "version!");
+        final Struct payload = envelope.create(before, source, System.nanoTime());
         return new SourceRecord(new HashMap<>(), new HashMap<>(), "dummy", envelope.schema(), payload);
     }
 
@@ -197,7 +206,7 @@ public class UnwrapFromEnvelopeTest {
             assertThat(((Struct) unwrapped.value()).getString("__deleted")).isEqualTo("true");
         }
     }
-
+ 
     @Test
     public void testHandleCreateRewrite() {
         try (final UnwrapFromEnvelope<SourceRecord> transform = new UnwrapFromEnvelope<>()) {
@@ -260,4 +269,45 @@ public class UnwrapFromEnvelopeTest {
             assertThat(headers.next().value().toString()).isEqualTo("shouldPropagatePreviousRecordHeaders");
         }
     }
+
+    @Test
+    public void testAddSourceField() {
+        try (final UnwrapFromEnvelope<SourceRecord> transform = new UnwrapFromEnvelope<>()) {
+            final Map<String, String> props = new HashMap<>();
+            props.put(ADD_SOURCE_FIELDS, "lsn");
+            transform.configure(props);
+
+            final SourceRecord createRecord = createCreateRecord();
+            final SourceRecord unwrapped = transform.apply(createRecord);
+            assertThat(((Struct) unwrapped.value()).getString("__lsn")).isEqualTo("lsn!");
+        }
+    }
+
+    @Test
+    public void testAddSourceFields() {
+        try (final UnwrapFromEnvelope<SourceRecord> transform = new UnwrapFromEnvelope<>()) {
+            final Map<String, String> props = new HashMap<>();
+            props.put(ADD_SOURCE_FIELDS, "lsn,version");
+            transform.configure(props);
+
+            final SourceRecord createRecord = createCreateRecord();
+            final SourceRecord unwrapped = transform.apply(createRecord);
+            assertThat(((Struct) unwrapped.value()).getString("__lsn")).isEqualTo("lsn!");
+            assertThat(((Struct) unwrapped.value()).getString("__version")).isEqualTo("version!");
+        }
+    }
+ 
+    @Test
+    public void testAddSourceNonExistantField() {
+        try (final UnwrapFromEnvelope<SourceRecord> transform = new UnwrapFromEnvelope<>()) {
+            final Map<String, String> props = new HashMap<>();
+            props.put(ADD_SOURCE_FIELDS, "nope");
+            transform.configure(props);
+
+            final SourceRecord createRecord = createCreateRecord();
+            final SourceRecord unwrapped = transform.apply(createRecord);
+            
+            assertThat(((Struct) unwrapped.value()).schema().field("__nope")).isNull();
+        }
+    }  
 }
