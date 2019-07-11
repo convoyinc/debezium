@@ -279,35 +279,6 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
             return unwrappedRecord;
         }
         
-        if(unwrappedRecord.valueSchema() == null) {
-            return addSourceFieldsSchemaless(addSourceFields, originalRecord, unwrappedRecord);
-        } else {
-            return addSourceFieldsWithSchema(addSourceFields, originalRecord, unwrappedRecord);
-        }
-    }
-
-    private R addSourceFieldsSchemaless(String[] addSourceFields, R originalRecord, R unwrappedRecord) {
-        final Map<String, Object> value = requireMap(unwrappedRecord.value(), PURPOSE);
-        final Map<String, Object> updatedValue = new HashMap<>(value);
-        Struct source = ((Struct) originalRecord.value()).getStruct("source");
-        
-        // Add the new source fields to add
-        for(String sourceField : addSourceFields) {
-            String fieldValue = source.schema().field(sourceField) == null ? "" : source.getString(sourceField);
-            updatedValue.put("__" + sourceField, fieldValue);
-        }
-
-        return unwrappedRecord.newRecord(
-                unwrappedRecord.topic(), 
-                unwrappedRecord.kafkaPartition(), 
-                unwrappedRecord.keySchema(), 
-                unwrappedRecord.key(), 
-                null, 
-                updatedValue, 
-                unwrappedRecord.timestamp());
-    }
-
-    private R addSourceFieldsWithSchema(String[] addSourceFields, R originalRecord, R unwrappedRecord) {
         final Struct value = requireStruct(unwrappedRecord.value(), PURPOSE);
         Struct source = ((Struct) originalRecord.value()).getStruct("source");
         
