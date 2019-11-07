@@ -195,7 +195,8 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.INT4RANGE_ARRAY:
             case PgOid.NUM_RANGE_ARRAY:
             case PgOid.INT8RANGE_ARRAY:
-            return SchemaBuilder.array(SchemaBuilder.OPTIONAL_STRING_SCHEMA);
+            case PgOid.UUID_ARRAY:
+                return SchemaBuilder.array(SchemaBuilder.OPTIONAL_STRING_SCHEMA);
             case PgOid.NUMERIC_ARRAY:
                 return SchemaBuilder.array(numericSchema(column).optional().build());
             case PgOid.FLOAT4_ARRAY:
@@ -219,7 +220,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.NAME_ARRAY:
             case PgOid.INTERVAL_ARRAY:
             case PgOid.VARBIT_ARRAY:
-            case PgOid.UUID_ARRAY:
             case PgOid.XML_ARRAY:
             case PgOid.POINT_ARRAY:
             case PgOid.JSONB_ARRAY:
@@ -343,6 +343,7 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.INT4RANGE_ARRAY:
             case PgOid.NUM_RANGE_ARRAY:
             case PgOid.INT8RANGE_ARRAY:
+            case PgOid.UUID_ARRAY:
                 return createArrayConverter(column, fieldDefn);
 
             // TODO DBZ-459 implement support for these array types; for now we just fall back to the default, i.e.
@@ -357,7 +358,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.NAME_ARRAY:
             case PgOid.INTERVAL_ARRAY:
             case PgOid.VARBIT_ARRAY:
-            case PgOid.UUID_ARRAY:
             case PgOid.XML_ARRAY:
             case PgOid.POINT_ARRAY:
             case PgOid.JSONB_ARRAY:
