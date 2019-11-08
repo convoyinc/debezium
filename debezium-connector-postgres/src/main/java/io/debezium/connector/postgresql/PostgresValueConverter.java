@@ -196,6 +196,21 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.NUM_RANGE_ARRAY:
             case PgOid.INT8RANGE_ARRAY:
             case PgOid.UUID_ARRAY:
+            case PgOid.TIMESTAMP_ARRAY:
+            case PgOid.TIMESTAMPTZ_ARRAY:
+            case PgOid.TIME_ARRAY:
+            case PgOid.TIMETZ_ARRAY:
+            case PgOid.BYTEA_ARRAY:
+            case PgOid.OID_ARRAY:
+            case PgOid.MONEY_ARRAY:
+            case PgOid.NAME_ARRAY:
+            case PgOid.INTERVAL_ARRAY:
+            case PgOid.VARBIT_ARRAY:
+            case PgOid.XML_ARRAY:
+            case PgOid.POINT_ARRAY:
+            case PgOid.JSONB_ARRAY:
+            case PgOid.JSON_ARRAY:
+            case PgOid.REF_CURSOR_ARRAY:
                 return SchemaBuilder.array(SchemaBuilder.OPTIONAL_STRING_SCHEMA);
             case PgOid.NUMERIC_ARRAY:
                 return SchemaBuilder.array(numericSchema(column).optional().build());
@@ -210,21 +225,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
                     return SchemaBuilder.array(io.debezium.time.Date.builder().optional().build());
                 }
                 return SchemaBuilder.array(org.apache.kafka.connect.data.Date.builder().optional().build());
-            case PgOid.TIME_ARRAY:
-            case PgOid.TIMETZ_ARRAY:
-            case PgOid.TIMESTAMP_ARRAY:
-            case PgOid.TIMESTAMPTZ_ARRAY:
-            case PgOid.BYTEA_ARRAY:
-            case PgOid.OID_ARRAY:
-            case PgOid.MONEY_ARRAY:
-            case PgOid.NAME_ARRAY:
-            case PgOid.INTERVAL_ARRAY:
-            case PgOid.VARBIT_ARRAY:
-            case PgOid.XML_ARRAY:
-            case PgOid.POINT_ARRAY:
-            case PgOid.JSONB_ARRAY:
-            case PgOid.JSON_ARRAY:
-            case PgOid.REF_CURSOR_ARRAY:
                 // These array types still need to be implemented.  The superclass won't handle them so
                 // we return null here until we can code schema implementations for them.
                 return null;
@@ -344,14 +344,10 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.NUM_RANGE_ARRAY:
             case PgOid.INT8RANGE_ARRAY:
             case PgOid.UUID_ARRAY:
-                return createArrayConverter(column, fieldDefn);
-
-            // TODO DBZ-459 implement support for these array types; for now we just fall back to the default, i.e.
-            // having no converter, so to be consistent with the schema definitions above
-            case PgOid.TIME_ARRAY:
-            case PgOid.TIMETZ_ARRAY:
             case PgOid.TIMESTAMP_ARRAY:
             case PgOid.TIMESTAMPTZ_ARRAY:
+            case PgOid.TIME_ARRAY:
+            case PgOid.TIMETZ_ARRAY:
             case PgOid.BYTEA_ARRAY:
             case PgOid.OID_ARRAY:
             case PgOid.MONEY_ARRAY:
@@ -363,6 +359,10 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.JSONB_ARRAY:
             case PgOid.JSON_ARRAY:
             case PgOid.REF_CURSOR_ARRAY:
+                return createArrayConverter(column, fieldDefn);
+
+            // TODO DBZ-459 implement support for these array types; for now we just fall back to the default, i.e.
+            // having no converter, so to be consistent with the schema definitions above
                 return super.converter(column, fieldDefn);
 
             default:
