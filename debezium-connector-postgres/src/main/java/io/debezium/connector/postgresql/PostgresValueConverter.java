@@ -225,9 +225,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
                     return SchemaBuilder.array(io.debezium.time.Date.builder().optional().build());
                 }
                 return SchemaBuilder.array(org.apache.kafka.connect.data.Date.builder().optional().build());
-                // These array types still need to be implemented.  The superclass won't handle them so
-                // we return null here until we can code schema implementations for them.
-                return null;
 
             default:
                 if (oidValue == typeRegistry.geometryOid()) {
@@ -360,10 +357,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
             case PgOid.JSON_ARRAY:
             case PgOid.REF_CURSOR_ARRAY:
                 return createArrayConverter(column, fieldDefn);
-
-            // TODO DBZ-459 implement support for these array types; for now we just fall back to the default, i.e.
-            // having no converter, so to be consistent with the schema definitions above
-                return super.converter(column, fieldDefn);
 
             default:
                 if (oidValue == typeRegistry.geometryOid()) {
