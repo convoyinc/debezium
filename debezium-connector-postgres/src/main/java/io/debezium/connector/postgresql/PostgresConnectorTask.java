@@ -40,7 +40,6 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    private String databaseName = "";
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
 
@@ -64,7 +63,6 @@ public class PostgresConnectorTask extends BaseSourceTask {
         }
 
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
-        this.databaseName = connectorConfig.databaseName();
 
         TypeRegistry typeRegistry;
         Charset databaseCharset;
@@ -164,7 +162,6 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
         if (events.size() > 0) {
             lastCompletelyProcessedLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
-            logger.info("{} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), lastCompletelyProcessedLsn);
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
     }
