@@ -151,6 +151,15 @@ public final class SourceInfo extends AbstractSourceInfo {
     }
 
     /**
+     * Get the database name.
+     *
+     * @return the database name
+     */
+    public String databaseName() {
+        return this.dbName;
+    }
+
+    /**
      * Get the Kafka Connect detail about the source "offset", which describes the position within the source where we last
      * have last read.
      *

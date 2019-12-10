@@ -56,6 +56,7 @@ public class RecordsStreamProducer extends RecordsProducer {
 
     private static final String CONTEXT_NAME = "records-stream-producer";
 
+    private final SourceInfo sourceInfo;
     private final ExecutorService executorService;
     private final ReplicationConnection replicationConnection;
     private final AtomicReference<ReplicationStream> replicationStream;
@@ -79,6 +80,7 @@ public class RecordsStreamProducer extends RecordsProducer {
     public RecordsStreamProducer(PostgresTaskContext taskContext,
                                  SourceInfo sourceInfo) {
         super(taskContext, sourceInfo);
+        this.sourceInfo = sourceInfo;
         executorService = Threads.newSingleThreadExecutor(PostgresConnector.class, taskContext.config().getLogicalName(), CONTEXT_NAME);
         this.replicationStream = new AtomicReference<>();
         try {
@@ -163,17 +165,16 @@ public class RecordsStreamProducer extends RecordsProducer {
             ReplicationStream replicationStream = this.replicationStream.get();
 
             if (replicationStream != null) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Flushing LSN to server: {}", LogSequenceNumber.valueOf(lsn));
-                }
+                logger.info("[LSN_DEBUG] {} - Flushing LSN to server: {}", this.sourceInfo.databaseName(), LogSequenceNumber.valueOf(lsn));
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
                 replicationStream.flushLsn(lsn);
             }
             else {
-                logger.debug("Streaming has already stopped, ignoring commit callback...");
+                logger.info("[LSN_DEBUG] {} - Streaming has already stopped, ignoring commit callback...", this.sourceInfo.databaseName());
             }
         }
         catch (SQLException e) {
+            logger.info("[LSN_DEBUG] {} - Failed to flush LSN to server: {}", this.sourceInfo.databaseName(), LogSequenceNumber.valueOf(lsn));
             throw new ConnectException(e);
         }
         finally {
