@@ -165,16 +165,16 @@ public class RecordsStreamProducer extends RecordsProducer {
             ReplicationStream replicationStream = this.replicationStream.get();
 
             if (replicationStream != null) {
-                logger.info("{} - Flushing LSN to server: {}", this.sourceInfo.databaseName(), LogSequenceNumber.valueOf(lsn));
+                logger.info("[LSN_DEBUG] {} - Flushing LSN to server: {}", this.sourceInfo.databaseName(), LogSequenceNumber.valueOf(lsn));
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
                 replicationStream.flushLsn(lsn);
             }
             else {
-                logger.info("{} - Streaming has already stopped, ignoring commit callback...", this.sourceInfo.databaseName());
+                logger.info("[LSN_DEBUG] {} - Streaming has already stopped, ignoring commit callback...", this.sourceInfo.databaseName());
             }
         }
         catch (SQLException e) {
-            logger.info("{} - Failed to flush LSN to server: {}", this.sourceInfo.databaseName(), LogSequenceNumber.valueOf(lsn));
+            logger.info("[LSN_DEBUG] {} - Failed to flush LSN to server: {}", this.sourceInfo.databaseName(), LogSequenceNumber.valueOf(lsn));
             throw new ConnectException(e);
         }
         finally {
