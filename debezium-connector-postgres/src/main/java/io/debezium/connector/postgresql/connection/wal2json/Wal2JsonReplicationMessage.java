@@ -138,7 +138,13 @@ class Wal2JsonReplicationMessage implements ReplicationMessage {
 
                 @Override
                 public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
-                    return Wal2JsonReplicationMessage.this.getValue(columnName, columnType, columnTypeName, rawValue, connection, includeUnknownDatatypes);
+                    try {
+                        return Wal2JsonReplicationMessage.this.getValue(columnName, columnType, columnTypeName, rawValue, connection, includeUnknownDatatypes);
+                    }
+                    catch(java.time.format.DateTimeParseException dpe) {
+                        LOGGER.error("Failed to parse timestamp for {} '{}'", columnName, rawValue);
+                        return null;
+                    }
                 }
 
                 @Override
