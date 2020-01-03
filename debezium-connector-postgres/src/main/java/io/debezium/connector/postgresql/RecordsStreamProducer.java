@@ -301,8 +301,8 @@ public class RecordsStreamProducer extends RecordsProducer {
     }
 
     protected void generateCreateRecord(TableId tableId, Object[] rowData, BlockingConsumer<ChangeEvent> recordConsumer) throws InterruptedException {
-        // add more logging to 1 in 10,000 creation events
-        boolean enhancedDebug = Math.random() < 0.0001;
+        // add more logging to 1 in 5,000 creation events
+        boolean enhancedDebug = Math.random() < 0.0002;
         if (rowData == null || rowData.length == 0) {
             logger.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableId, sourceInfo);
             return;
@@ -409,8 +409,8 @@ public class RecordsStreamProducer extends RecordsProducer {
     }
 
     protected void generateDeleteRecord(TableId tableId, Object[] oldRowData, BlockingConsumer<ChangeEvent> recordConsumer) throws InterruptedException {
-        // add more logging to 1 in 1,000 deletion events
-        boolean enhancedDebug = Math.random() < 0.001;
+        // add more logging to 1 in 5,000 creation events
+        boolean enhancedDebug = Math.random() < 0.0002;
 
         if (oldRowData == null || oldRowData.length == 0) {
             logger.warn("no values found for table '{}' from delete message at '{}'; skipping record" , tableId, sourceInfo);
