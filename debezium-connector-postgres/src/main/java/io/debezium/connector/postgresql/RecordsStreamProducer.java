@@ -301,6 +301,8 @@ public class RecordsStreamProducer extends RecordsProducer {
     }
 
     protected void generateCreateRecord(TableId tableId, Object[] rowData, BlockingConsumer<ChangeEvent> recordConsumer) throws InterruptedException {
+        // add more logging to 1 in 5,000 creation events
+        boolean enhancedDebug = Math.random() < 0.0002;
         if (rowData == null || rowData.length == 0) {
             logger.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableId, sourceInfo);
             return;
@@ -319,9 +321,15 @@ public class RecordsStreamProducer extends RecordsProducer {
         Map<String, ?> offset = sourceInfo.offset();
         String topicName = topicSelector().topicNameFor(tableId);
         Envelope envelope = tableSchema.getEnvelopeSchema();
+        Struct source = sourceInfo.source();
 
         SourceRecord record = new SourceRecord(partition, offset, topicName, null, keySchema, key, envelope.schema(),
-                                               envelope.create(value, sourceInfo.source(), clock().currentTimeInMillis()));
+                                               envelope.create(value, source, clock().currentTimeInMillis()));
+
+        if (enhancedDebug) {
+            logger.info("[RECORD_DEBUG] Sending create record {} with source {} for topic {} at lsn {}", record, source, topicName, lastCompletelyProcessedLsn);
+        }
+
         if (logger.isDebugEnabled()) {
             logger.debug("sending create event '{}' to topic '{}'", record, topicName);
         }
@@ -401,6 +409,9 @@ public class RecordsStreamProducer extends RecordsProducer {
     }
 
     protected void generateDeleteRecord(TableId tableId, Object[] oldRowData, BlockingConsumer<ChangeEvent> recordConsumer) throws InterruptedException {
+        // add more logging to 1 in 5,000 creation events
+        boolean enhancedDebug = Math.random() < 0.0002;
+
         if (oldRowData == null || oldRowData.length == 0) {
             logger.warn("no values found for table '{}' from delete message at '{}'; skipping record" , tableId, sourceInfo);
             return;
@@ -418,16 +429,20 @@ public class RecordsStreamProducer extends RecordsProducer {
         Map<String, ?> offset = sourceInfo.offset();
         String topicName = topicSelector().topicNameFor(tableId);
         Envelope envelope = tableSchema.getEnvelopeSchema();
+        Struct source = sourceInfo.source();
 
         // create the regular delete record
         ChangeEvent changeEvent = new ChangeEvent(
                 new SourceRecord(
                         partition, offset, topicName, null,
                         keySchema, key, envelope.schema(),
-                        envelope.delete(value, sourceInfo.source(), clock().currentTimeInMillis())),
+                        envelope.delete(value, source, clock().currentTimeInMillis())),
                 lastCompletelyProcessedLsn);
         if (logger.isDebugEnabled()) {
             logger.debug("sending delete event '{}' to topic '{}'", changeEvent.getRecord(), topicName);
+        }
+        if (enhancedDebug) {
+            logger.info("[RECORD_DEBUG] Sending delete record {} with source {} for topic {} at lsn {}", changeEvent.getRecord(), source, topicName, lastCompletelyProcessedLsn);
         }
         recordConsumer.accept(changeEvent);
 
