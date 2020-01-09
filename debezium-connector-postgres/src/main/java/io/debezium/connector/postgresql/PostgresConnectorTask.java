@@ -166,6 +166,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
         if (events.size() > 0) {
             lastCompletelyProcessedLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
             logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
+            logger.info("[RECORD_DEBUG] First event being polled: {}", events.get(0));
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
     }
