@@ -257,12 +257,12 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
                     logger.trace("Delete message {} requested to be rewritten", record.key());
                     R oldRecord = beforeDelegate.apply(record);
                     if (shouldLogDelete) {
-                        logger.info("[TRANSFORM_DEBUG] Transforming delete record FROM: {} APPLY BEFORE: {}", record, oldRecord);
+                        logger.info("[TRANSFORM_DEBUG] Transforming delete record\nFROM: {}\nAPPLY BEFORE: {}", record, oldRecord);
                     }
                     oldRecord = addSourceFields(addSourceFields, record, oldRecord);
                     R removeRecord = removedDelegate.apply(oldRecord);
                     if (shouldLogDelete) {
-                        logger.info("[TRANSFORM_DEBUG] Transforming delete record STARTED AS: {} ADD SOURCE: {} APPLY REMOVE: {}", record, oldRecord, removeRecord);
+                        logger.info("[TRANSFORM_DEBUG] Transforming delete record\nSTARTED AS: {}\nADD SOURCE: {}\nAPPLY REMOVE: {}", record, oldRecord, removeRecord);
                     }
                     return removeRecord;
                 default:
