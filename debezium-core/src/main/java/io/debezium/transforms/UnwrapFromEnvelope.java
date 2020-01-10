@@ -252,7 +252,8 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
                     return null;
                 case REWRITE:
                     logger.trace("Delete message {} requested to be rewritten", record.key());
-                    final R oldRecord = beforeDelegate.apply(record);
+                    R oldRecord = beforeDelegate.apply(record);
+                    oldRecord = addSourceFields(addSourceFields, record, oldRecord);
                     return removedDelegate.apply(oldRecord);
                 default:
                     return newRecord;
