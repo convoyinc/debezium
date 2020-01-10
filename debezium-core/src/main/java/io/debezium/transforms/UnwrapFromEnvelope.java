@@ -243,6 +243,9 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
             logger.warn("Expected Envelope for transformation, passing it unchanged");
             return record;
         }
+
+        boolean shouldLogDelete = Math.random() < 0.0001 && record.topic().equals("production_shipotle.public.requested_load_offers");
+
         R newRecord = afterDelegate.apply(record);
         if (newRecord.value() == null) {
             // Handling delete records
@@ -253,8 +256,15 @@ public class UnwrapFromEnvelope<R extends ConnectRecord<R>> implements Transform
                 case REWRITE:
                     logger.trace("Delete message {} requested to be rewritten", record.key());
                     R oldRecord = beforeDelegate.apply(record);
+                    if (shouldLogDelete) {
+                        logger.info("[TRANSFORM_DEBUG] Transforming delete record\nFROM: {}\nAPPLY BEFORE: {}", record, oldRecord);
+                    }
                     oldRecord = addSourceFields(addSourceFields, record, oldRecord);
-                    return removedDelegate.apply(oldRecord);
+                    R removeRecord = removedDelegate.apply(oldRecord);
+                    if (shouldLogDelete) {
+                        logger.info("[TRANSFORM_DEBUG] Transforming delete record\nSTARTED AS: {}\nADD SOURCE: {}\nAPPLY REMOVE: {}", record, oldRecord, removeRecord);
+                    }
+                    return removeRecord;
                 default:
                     return newRecord;
             }
