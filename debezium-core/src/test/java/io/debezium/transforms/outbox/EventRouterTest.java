@@ -21,12 +21,11 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.apache.kafka.connect.transforms.util.Requirements.requireStruct;
-import static org.fest.assertions.Assertions.assertThat;
+import io.debezium.connector.AbstractSourceInfo;
+import io.debezium.data.Envelope;
+import io.debezium.data.VerifyRecord;
+import io.debezium.doc.FixFor;
+import io.debezium.time.Timestamp;
 
 /**
  * Unit tests for {@link EventRouter}
@@ -353,7 +352,7 @@ public class EventRouterTest {
         Long expectedTimestamp = 14222264625338L;
 
         Map<String, Schema> extraFields = new HashMap<>();
-        extraFields.put("event_timestamp", Schema.INT64_SCHEMA);
+        extraFields.put("event_timestamp", Timestamp.schema());
 
         Map<String, Object> extraValues = new HashMap<>();
         extraValues.put("event_timestamp", expectedTimestamp);
