@@ -167,6 +167,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
         if (events.size() > 0) {
             lastCompletelyProcessedLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
             logger.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {} - {} events", LogSequenceNumber.valueOf(lastCompletelyProcessedLsn), events.size());
+            logger.info("[DEBEZIUM_DATA_DEBUG] FIRST = {}", events.get(0).getRecord().value());
             //for (ChangeEvent e : events) {
             //  logger.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {}", e.getRecord().value());
             //}
@@ -176,6 +177,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
     @Override
     public void stop() {
+        logger.info("[DEBEZIUM_DATA_DEBUG] STOP");
         if (running.compareAndSet(true, false)) {
             producer.stop();
         }
