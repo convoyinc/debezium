@@ -59,6 +59,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
     @Override
     public void start(Configuration config) {
+        logger.info("[DEBEZIUM_DATA_DEBUG] START");
         if (running.get()) {
             // already running
             return;
@@ -154,8 +155,8 @@ public class PostgresConnectorTask extends BaseSourceTask {
     public void commit() throws InterruptedException {
         if (running.get()) {
             if (lastCompletelyProcessedLsn != null) {
+                logger.error("[DEBEZIUM_DATA_DEBUG] COMMIT " + LogSequenceNumber.valueOf(lastCompletelyProcessedLsn), new Exception());
                 producer.commit(lastCompletelyProcessedLsn);
-                logger.info("[DEBEZIUM_DATA_DEBUG] COMMIT {}", LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
             }
         }
     }
