@@ -162,6 +162,11 @@ public class PostgresConnectorTask extends BaseSourceTask {
     }
 
     @Override
+    public void commitRecord(SourceRecord record) throws InterruptedException {
+      logger.info("[DEBEZIUM_DATA_DEBUG] RECORD COMMIT " + record.value());
+    }
+
+    @Override
     public List<SourceRecord> poll() throws InterruptedException {
         List<ChangeEvent> events = changeEventQueue.poll();
 
