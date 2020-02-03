@@ -186,10 +186,12 @@ public class PostgresConnectorTask extends BaseSourceTask {
         if (events.size() > 0) {
             ChangeEvent lastEvent = events.get(events.size() - 1);
             Long lsn = lastEvent.getLastCompletelyProcessedLsn();
-            logger.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {} - {} events", LogSequenceNumber.valueOf(lsn), events.size());
-            logger.info("[DEBEZIUM_DATA_DEBUG] FIRST = {}", events.get(0).getRecord().value());
-            synchronized (this) {
-                batchLsns.add(new BatchOffsetAndLsn(lastEvent.getRecord().sourceOffset(), lsn));
+            if (lsn != null) {
+                logger.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {} - {} events", LogSequenceNumber.valueOf(lsn), events.size());
+                logger.info("[DEBEZIUM_DATA_DEBUG] FIRST = {}", events.get(0).getRecord().value());
+                synchronized (this) {
+                    batchLsns.add(new BatchOffsetAndLsn(lastEvent.getRecord().sourceOffset(), lsn));
+                }
             }
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
