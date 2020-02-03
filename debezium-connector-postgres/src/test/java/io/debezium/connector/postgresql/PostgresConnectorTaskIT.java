@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -26,7 +27,7 @@ public class PostgresConnectorTaskIT {
     @FixFor("DBZ-519")
     public void shouldNotThrowNullPointerExceptionDuringCommit() throws Exception {
         PostgresConnectorTask postgresConnectorTask = new PostgresConnectorTask();
-        postgresConnectorTask.commit();
+        postgresConnectorTask.commitRecord(new SourceRecord(null, null, null, null, null));
     }
 
     class FakeContext extends PostgresTaskContext {

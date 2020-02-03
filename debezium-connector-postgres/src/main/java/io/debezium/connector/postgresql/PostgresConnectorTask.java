@@ -9,8 +9,10 @@ package io.debezium.connector.postgresql;
 import java.nio.charset.Charset;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -61,7 +63,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private volatile ChangeEventSourceCoordinator coordinator;
     private volatile ErrorHandler errorHandler;
     private volatile PostgresSchema schema;
-    private volatile Map<String, ?> lastOffset;
+    private Queue<Map<String, ?>> lastOffsetQueue;
 
     @Override
     public void start(Configuration config) {
@@ -69,6 +71,8 @@ public class PostgresConnectorTask extends BaseSourceTask {
             LOGGER.info("Connector has already been started");
             return;
         }
+
+        this.lastOffsetQueue = new LinkedList<>();
 
         final PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         final TopicSelector<TableId> topicSelector = PostgresTopicSelector.create(connectorConfig);
@@ -213,9 +217,15 @@ public class PostgresConnectorTask extends BaseSourceTask {
     }
 
     @Override
-    public void commit() throws InterruptedException {
-        if (coordinator != null) {
-            coordinator.commitOffset(lastOffset);
+    public void commitRecord(SourceRecord record) throws InterruptedException {
+        Map<String, ?> offset = null;
+        synchronized (this) {
+            if (!lastOffsetQueue.isEmpty() && lastOffsetQueue.peek().equals(record.sourceOffset())) {
+                offset = lastOffsetQueue.remove();
+            }
+        }
+        if (offset != null && coordinator != null) {
+            coordinator.commitOffset(offset);
         }
     }
 
@@ -228,7 +238,12 @@ public class PostgresConnectorTask extends BaseSourceTask {
                 .collect(Collectors.toList());
 
         if (!sourceRecords.isEmpty()) {
-            this.lastOffset = sourceRecords.get(sourceRecords.size() - 1).sourceOffset();
+            Map<String, ?> offset = sourceRecords.get(sourceRecords.size() - 1).sourceOffset();
+            if (offset != null) {
+                synchronized (this) {
+                    lastOffsetQueue.add(offset);
+                }
+            }
         }
 
         return sourceRecords;
