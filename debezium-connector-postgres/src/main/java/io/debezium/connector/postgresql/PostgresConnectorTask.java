@@ -8,8 +8,10 @@ package io.debezium.connector.postgresql;
 
 import java.nio.charset.Charset;
 import java.sql.SQLException;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -45,11 +47,21 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
 
-    /**
-     * In case of wal2json, all records of one TX will be sent with the same LSN. This is the last LSN that was
-     * completely processed, i.e. we've seen all events originating from that TX.
-     */
-    private volatile Long lastCompletelyProcessedLsn;
+    // We use this pair to represent a batch - the lsn is how we interact with the producer,
+    // and the offset is how we interact with Kafka Connect.
+    private class BatchOffsetAndLsn {
+        public Map<String, ?> offset;
+        public Long lsn;
+
+        public BatchOffsetAndLsn(Map<String, ?> offset, Long lsn) {
+            this.offset = offset;
+            this.lsn = lsn;
+        }
+    }
+    // A FIFO queue for uncommitted batches. We won't commit a batch back to Postgres before
+    // we see a commitRecord call with the offset of the last record in the batch. Make sure
+    // to synchronize access to the queue.
+    private Queue<BatchOffsetAndLsn> batchLsns;
 
     /**
      * A queue with change events filled by the snapshot and streaming producers, consumed
@@ -66,6 +78,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         this.databaseName = connectorConfig.databaseName();
+        this.batchLsns = new LinkedList<>();
 
         TypeRegistry typeRegistry;
         Charset databaseCharset;
@@ -151,10 +164,16 @@ public class PostgresConnectorTask extends BaseSourceTask {
     }
 
     @Override
-    public void commit() throws InterruptedException {
+    public void commitRecord(SourceRecord record) throws InterruptedException {
         if (running.get()) {
-            if (lastCompletelyProcessedLsn != null) {
-                producer.commit(lastCompletelyProcessedLsn);
+            Long completedLsn = null;
+            synchronized (this) {
+                if (!batchLsns.isEmpty() && batchLsns.peek().offset.equals(record.sourceOffset())) {
+                    completedLsn = batchLsns.remove().lsn;
+                }
+            }
+            if (completedLsn != null) {
+                producer.commit(completedLsn);
             }
         }
     }
@@ -164,8 +183,14 @@ public class PostgresConnectorTask extends BaseSourceTask {
         List<ChangeEvent> events = changeEventQueue.poll();
 
         if (events.size() > 0) {
-            lastCompletelyProcessedLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
-            logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
+            ChangeEvent lastEvent = events.get(events.size() - 1);
+            Long lsn = lastEvent.getLastCompletelyProcessedLsn();
+            if (lsn != null) {
+                logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
+                synchronized (this) {
+                    batchLsns.add(new BatchOffsetAndLsn(lastEvent.getRecord().sourceOffset(), lsn));
+                }
+            }
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
     }
