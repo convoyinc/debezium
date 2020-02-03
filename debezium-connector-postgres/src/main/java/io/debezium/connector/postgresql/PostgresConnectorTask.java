@@ -8,6 +8,7 @@ package io.debezium.connector.postgresql;
 
 import java.nio.charset.Charset;
 import java.sql.SQLException;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,11 +46,20 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
 
-    /**
-     * In case of wal2json, all records of one TX will be sent with the same LSN. This is the last LSN that was
-     * completely processed, i.e. we've seen all events originating from that TX.
-     */
-    private volatile Long lastCompletelyProcessedLsn;
+    // We use this pair to represent a batch - the lsn is how we interact with the producer,
+    // and the offset is how we interact with Kafka Connect.
+    private class BatchOffsetAndLsn {
+        public Map<String, ?> offset;
+        public Long lsn;
+
+        public BatchOffsetAndLsn(Map<String, ?> offset, Long lsn) {
+            this.offset = offset;
+            this.lsn = lsn;
+        }
+    }
+    // A FIFO queue for uncommitted batches. We won't commit a batch back to Postgres before
+    // we see a commitRecord call with the offset of the last record in the batch.
+    private List<BatchOffsetAndLsn> batchLsns;
 
     /**
      * A queue with change events filled by the snapshot and streaming producers, consumed
@@ -59,6 +69,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
     @Override
     public void start(Configuration config) {
+        logger.info("[DEBEZIUM_DATA_DEBUG] START");
         if (running.get()) {
             // already running
             return;
@@ -66,6 +77,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         this.databaseName = connectorConfig.databaseName();
+        this.batchLsns = new LinkedList<>();
 
         TypeRegistry typeRegistry;
         Charset databaseCharset;
@@ -151,11 +163,18 @@ public class PostgresConnectorTask extends BaseSourceTask {
     }
 
     @Override
-    public void commit() throws InterruptedException {
+    public void commitRecord(SourceRecord record) throws InterruptedException {
         if (running.get()) {
-            if (lastCompletelyProcessedLsn != null) {
-                producer.commit(lastCompletelyProcessedLsn);
-                logger.info("[DEBEZIUM_DATA_DEBUG] COMMIT {}", LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
+            Long completedLsn = null;
+            synchronized (this) {
+                if (batchLsns.size() > 0 && batchLsns.get(0).offset.equals(record.sourceOffset())) {
+                    completedLsn = batchLsns.get(0).lsn;
+                    batchLsns.remove(0);
+                }
+            }
+            if (completedLsn != null) {
+                logger.error("[DEBEZIUM_DATA_DEBUG] COMMIT " + LogSequenceNumber.valueOf(completedLsn), new Exception());
+                producer.commit(completedLsn);
             }
         }
     }
@@ -165,10 +184,14 @@ public class PostgresConnectorTask extends BaseSourceTask {
         List<ChangeEvent> events = changeEventQueue.poll();
 
         if (events.size() > 0) {
-            lastCompletelyProcessedLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
-            logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
-            for (ChangeEvent e : events) {
-              logger.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {}", e.getRecord().value());
+            ChangeEvent lastEvent = events.get(events.size() - 1);
+            Long lsn = lastEvent.getLastCompletelyProcessedLsn();
+            if (lsn != null) {
+                logger.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {} - {} events", LogSequenceNumber.valueOf(lsn), events.size());
+                logger.info("[DEBEZIUM_DATA_DEBUG] FIRST = {}", events.get(0).getRecord().value());
+                synchronized (this) {
+                    batchLsns.add(new BatchOffsetAndLsn(lastEvent.getRecord().sourceOffset(), lsn));
+                }
             }
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
@@ -176,6 +199,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
     @Override
     public void stop() {
+        logger.info("[DEBEZIUM_DATA_DEBUG] STOP");
         if (running.compareAndSet(true, false)) {
             producer.stop();
         }

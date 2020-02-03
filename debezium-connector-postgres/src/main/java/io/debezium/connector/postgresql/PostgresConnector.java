@@ -38,6 +38,7 @@ public class PostgresConnector extends SourceConnector {
     private Map<String, String> props;
 
     public PostgresConnector() {
+        logger.info("[DEBEZIUM_DATA_DEBUG] PostgresConnector CREATE");
     }
 
     @Override
@@ -63,6 +64,7 @@ public class PostgresConnector extends SourceConnector {
 
     @Override
     public void stop() {
+        logger.info("[DEBEZIUM_DATA_DEBUG] PostgresConnector STOP");
         this.props = null;
     }
 
