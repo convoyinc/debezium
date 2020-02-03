@@ -64,7 +64,7 @@ public class PostgresConnector extends SourceConnector {
 
     @Override
     public void stop() {
-      logger.info("[DEBEZIUM_DATA_DEBUG] PostgresConnector STOP");
+        logger.info("[DEBEZIUM_DATA_DEBUG] PostgresConnector STOP");
         this.props = null;
     }
 
