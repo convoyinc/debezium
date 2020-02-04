@@ -217,6 +217,12 @@ public class PostgresConnectorTask extends BaseSourceTask {
     }
 
     @Override
+    public void commitRecord(SourceRecord record) throws InterruptedException {
+        LOGGER.info("[DBZ SOURCE LOG] Commit Record: {}", record.toString());
+        LOGGER.info("[DBZ SOURCE LOG] source: {}", record.sourceOffset().toString());
+    }
+
+    @Override
     public List<SourceRecord> poll() throws InterruptedException {
         final List<DataChangeEvent> records = queue.poll();
 
