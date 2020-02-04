@@ -186,7 +186,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
             ChangeEvent lastEvent = events.get(events.size() - 1);
             Long lsn = lastEvent.getLastCompletelyProcessedLsn();
             if (lsn != null) {
-                logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
+                logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lsn));
                 synchronized (this) {
                     batchLsns.add(new BatchOffsetAndLsn(lastEvent.getRecord().sourceOffset(), lsn));
                 }
