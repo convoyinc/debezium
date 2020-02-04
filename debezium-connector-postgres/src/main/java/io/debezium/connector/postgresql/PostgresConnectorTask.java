@@ -65,6 +65,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
     @Override
     public void start(Configuration config) {
+        LOGGER.info("[DEBEZIUM_DATA_DEBUG] START");
         if (!state.compareAndSet(State.STOPPED, State.RUNNING)) {
             LOGGER.info("Connector has already been started");
             return;
@@ -215,6 +216,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
     @Override
     public void commit() throws InterruptedException {
         if (coordinator != null) {
+            LOGGER.info("[DEBEZIUM_DATA_DEBUG] COMMIT " + lastOffset);
             coordinator.commitOffset(lastOffset);
         }
     }
@@ -229,6 +231,8 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
         if (!sourceRecords.isEmpty()) {
             this.lastOffset = sourceRecords.get(sourceRecords.size() - 1).sourceOffset();
+            LOGGER.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {} - {} events", this.lastOffset, sourceRecords.size());
+            LOGGER.info("[DEBEZIUM_DATA_DEBUG] FIRST = {}", sourceRecords.get(0).value());
         }
 
         return sourceRecords;
@@ -236,6 +240,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
     @Override
     public void stop() {
+        LOGGER.info("[DEBEZIUM_DATA_DEBUG] STOP");
         cleanupResources();
     }
 
