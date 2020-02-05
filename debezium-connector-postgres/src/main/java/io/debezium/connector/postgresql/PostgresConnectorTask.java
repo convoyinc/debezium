@@ -45,7 +45,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
 
-    private Long previousLsn;
+    private volatile Long previousLsn;
 
     /**
      * In case of wal2json, all records of one TX will be sent with the same LSN. This is the last LSN that was
@@ -163,17 +163,25 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
     @Override
     public void commitRecord(SourceRecord record) throws InterruptedException {
-        if (running.get()) {
-            Long recordLsn = (Long) record.sourceOffset().get(SourceInfo.LSN_KEY);
+        Long recordLsn = (Long) record.sourceOffset().get(SourceInfo.LSN_KEY);
 
-            // If this record has an lsn and it's larger than the last seen lsn, then we've fully processed
-            // the events with the last seen lsn
-            if (recordLsn != null && recordLsn > previousLsn) {
+        if (recordLsn != null) {
+            // If this is the first LSN we're seeing, just track it for comparing against the next record
+            if (previousLsn == null) {
+                previousLsn = recordLsn;
+            }
+            // Otherwise, if this LSN is larger than the last LSN, then we've fully processed the events
+            // with the previously seen LSN.
+            else if (recordLsn > previousLsn) {
                 // Update the last completely processed lsn to the previous batch's lsn
                 lastCompletelyProcessedLsn = previousLsn;
 
                 // Update previous lsn for comparison when processing the next batch
                 previousLsn = recordLsn;
+            }
+            // Otherwise, if this LSN is before the previously seen LSN, log that the LSN is out of order
+            else if (recordLsn < previousLsn) {
+                logger.warn("commitRecord received LSN in decreasing order: saw {} then {}", LogSequenceNumber.valueOf(previousLsn), LogSequenceNumber.valueOf(recordLsn));
             }
         }
     }
