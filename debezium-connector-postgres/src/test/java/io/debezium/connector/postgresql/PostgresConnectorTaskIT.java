@@ -6,8 +6,6 @@
 
 package io.debezium.connector.postgresql;
 
-import org.apache.kafka.connect.source.SourceRecord;
-
 import io.debezium.doc.FixFor;
 import org.junit.Test;
 
@@ -20,6 +18,6 @@ public class PostgresConnectorTaskIT {
     @FixFor("DBZ-519")
     public void shouldNotThrowNullPointerExceptionDuringCommit() throws Exception {
         PostgresConnectorTask postgresConnectorTask = new PostgresConnectorTask();
-        postgresConnectorTask.commitRecord(new SourceRecord(null, null, null, null, null));
+        postgresConnectorTask.commit();
     }
 }
