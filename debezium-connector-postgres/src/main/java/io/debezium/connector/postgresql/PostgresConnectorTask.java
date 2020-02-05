@@ -45,6 +45,8 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
 
+    private Long previousLsn;
+
     /**
      * In case of wal2json, all records of one TX will be sent with the same LSN. This is the last LSN that was
      * completely processed, i.e. we've seen all events originating from that TX.
@@ -160,12 +162,29 @@ public class PostgresConnectorTask extends BaseSourceTask {
     }
 
     @Override
+    public void commitRecord(SourceRecord record) throws InterruptedException {
+        if (running.get()) {
+            Long recordLsn = (Long) record.sourceOffset().get(SourceInfo.LSN_KEY);
+
+            // If this record has an lsn and it's larger than the last seen lsn, then we've fully processed
+            // the events with the last seen lsn
+            if (recordLsn != null && recordLsn > previousLsn) {
+                // Update the last completely processed lsn to the previous batch's lsn
+                lastCompletelyProcessedLsn = previousLsn;
+
+                // Update previous lsn for comparison when processing the next batch
+                previousLsn = recordLsn;
+            }
+        }
+    }
+
+    @Override
     public List<SourceRecord> poll() throws InterruptedException {
         List<ChangeEvent> events = changeEventQueue.poll();
 
         if (events.size() > 0) {
-            lastCompletelyProcessedLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
-            logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
+            ChangeEvent lastEvent = events.get(events.size() - 1);
+            logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastEvent.getLastCompletelyProcessedLsn()));
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
     }
