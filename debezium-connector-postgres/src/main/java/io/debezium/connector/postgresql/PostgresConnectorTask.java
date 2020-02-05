@@ -110,7 +110,11 @@ public class PostgresConnectorTask extends BaseSourceTask {
                     logger.info(connection.serverInfo().toString());
                 }
                 slotInfo = connection.getReplicationSlotInfo(connectorConfig.slotName(), connectorConfig.plugin().getPostgresPluginName());
-                logger.info("[DEBEZIUM_DATA_DEBUG] slot info flushed={}, restart={}", slotInfo.slotLastFlushedLsn(), slotInfo.slotRestartLsn());
+                if (slotInfo != null) {
+                    logger.info("[DEBEZIUM_DATA_DEBUG] slot info flushed={}, restart={}",
+                        slotInfo.slotLastFlushedLsn() == null ? "null" : slotInfo.slotLastFlushedLsn(),
+                        slotInfo.slotRestartLsn() == null ? "null" : slotInfo.slotRestartLsn());
+                }
             }
             catch (SQLException e) {
                 logger.warn("unable to load info of replication slot, debezium will try to create the slot");
