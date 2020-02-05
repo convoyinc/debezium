@@ -100,6 +100,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
         SourceInfo sourceInfo = new SourceInfo(connectorConfig.getLogicalName(), connectorConfig.databaseName());
         Map<String, Object> existingOffset = context.offsetStorageReader().offset(sourceInfo.partition());
+        logger.info("[DEBEZIUM_DATA_DEBUG] existingOffset = {}", existingOffset);
         LoggingContext.PreviousContext previousContext = taskContext.configureLoggingContext(CONTEXT_NAME);
         try {
             //Print out the server information
@@ -109,6 +110,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
                     logger.info(connection.serverInfo().toString());
                 }
                 slotInfo = connection.getReplicationSlotInfo(connectorConfig.slotName(), connectorConfig.plugin().getPostgresPluginName());
+                logger.info("[DEBEZIUM_DATA_DEBUG] slot info flushed={}, restart={}", slotInfo.slotLastFlushedLsn(), slotInfo.slotRestartLsn());
             }
             catch (SQLException e) {
                 logger.warn("unable to load info of replication slot, debezium will try to create the slot");
@@ -173,7 +175,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
                 }
             }
             if (completedLsn != null) {
-                logger.error("[DEBEZIUM_DATA_DEBUG] COMMIT " + LogSequenceNumber.valueOf(completedLsn), new Exception());
+                logger.info("[DEBEZIUM_DATA_DEBUG] COMMIT {} {}", LogSequenceNumber.valueOf(completedLsn), record.sourceOffset());
                 producer.commit(completedLsn);
             }
         }
@@ -188,7 +190,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
             Long lsn = lastEvent.getLastCompletelyProcessedLsn();
             if (lsn != null) {
                 logger.info("[DEBEZIUM_DATA_DEBUG] RECEIVED {} - {} events", LogSequenceNumber.valueOf(lsn), events.size());
-                logger.info("[DEBEZIUM_DATA_DEBUG] FIRST = {}", events.get(0).getRecord().value());
+                logger.info("[DEBEZIUM_DATA_DEBUG] FIRST = {} {}", events.get(0).getRecord().sourceOffset(), events.get(0).getRecord().value());
                 synchronized (this) {
                     batchLsns.add(new BatchOffsetAndLsn(lastEvent.getRecord().sourceOffset(), lsn));
                 }

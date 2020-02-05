@@ -107,6 +107,7 @@ public class RecordsStreamProducer extends RecordsProducer {
                 if (logger.isDebugEnabled()) {
                     logger.debug("retrieved latest position from stored offset '{}'", ReplicationConnection.format(lsn));
                 }
+                logger.info("[DEBEZIUM_DATA_DEBUG] last known pos={}", lsn);
                 replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn));
             } else {
                 logger.info("no previous LSN found in Kafka, streaming from the latest xlogpos or flushed LSN...");
@@ -253,6 +254,7 @@ public class RecordsStreamProducer extends RecordsProducer {
             return;
         }
         if (message.isLastEventForLsn()) {
+            logger.info("[DEBEZIUM_DATA_DEBUG] Setting lastCompletelyProcessedLsn from {} to {}", lastCompletelyProcessedLsn, lsn);
             lastCompletelyProcessedLsn = lsn;
         }
 
