@@ -45,6 +45,8 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
 
+    private volatile Long previousLsn;
+
     /**
      * In case of wal2json, all records of one TX will be sent with the same LSN. This is the last LSN that was
      * completely processed, i.e. we've seen all events originating from that TX.
@@ -160,12 +162,37 @@ public class PostgresConnectorTask extends BaseSourceTask {
     }
 
     @Override
+    public void commitRecord(SourceRecord record) throws InterruptedException {
+        Long recordLsn = (Long) record.sourceOffset().get(SourceInfo.LSN_KEY);
+
+        if (recordLsn != null) {
+            // If this is the first LSN we're seeing, just track it for comparing against the next record
+            if (previousLsn == null) {
+                previousLsn = recordLsn;
+            }
+            // Otherwise, if this LSN is larger than the last LSN, then we've fully processed the events
+            // with the previously seen LSN.
+            else if (recordLsn > previousLsn) {
+                // Update the last completely processed lsn to the previous batch's lsn
+                lastCompletelyProcessedLsn = previousLsn;
+
+                // Update previous lsn for comparison when processing the next batch
+                previousLsn = recordLsn;
+            }
+            // Otherwise, if this LSN is before the previously seen LSN, log that the LSN is out of order
+            else if (recordLsn < previousLsn) {
+                logger.warn("commitRecord received LSN in decreasing order: saw {} then {}", LogSequenceNumber.valueOf(previousLsn), LogSequenceNumber.valueOf(recordLsn));
+            }
+        }
+    }
+
+    @Override
     public List<SourceRecord> poll() throws InterruptedException {
         List<ChangeEvent> events = changeEventQueue.poll();
 
         if (events.size() > 0) {
-            lastCompletelyProcessedLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
-            logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastCompletelyProcessedLsn));
+            ChangeEvent lastEvent = events.get(events.size() - 1);
+            logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastEvent.getLastCompletelyProcessedLsn()));
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
     }
