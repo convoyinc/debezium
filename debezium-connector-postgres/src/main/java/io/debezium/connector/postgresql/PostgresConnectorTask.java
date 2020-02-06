@@ -191,8 +191,10 @@ public class PostgresConnectorTask extends BaseSourceTask {
         List<ChangeEvent> events = changeEventQueue.poll();
 
         if (events.size() > 0) {
-            ChangeEvent lastEvent = events.get(events.size() - 1);
-            logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastEvent.getLastCompletelyProcessedLsn()));
+            Long lastLsn = events.get(events.size() - 1).getLastCompletelyProcessedLsn();
+            if (lastLsn != null) {
+                logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastLsn));
+            }
         }
         return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
     }
