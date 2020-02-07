@@ -101,17 +101,10 @@ public class RecordsStreamProducer extends RecordsProducer {
                 logger.info("Streaming will not start, stop already requested");
                 return;
             }
-            if (sourceInfo.hasLastKnownPosition()) {
-                // start streaming from the last recorded position in the offset
-                Long lsn = sourceInfo.lsn();
-                if (logger.isDebugEnabled()) {
-                    logger.debug("retrieved latest position from stored offset '{}'", ReplicationConnection.format(lsn));
-                }
-                replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn));
-            } else {
-                logger.info("no previous LSN found in Kafka, streaming from the latest xlogpos or flushed LSN...");
-                replicationStream.compareAndSet(null, replicationConnection.startStreaming());
-            }
+            
+            logger.info("Starting task, streaming from the latest xlogpos or flushed LSN...");
+            replicationStream.compareAndSet(null, replicationConnection.startStreaming());
+            
 
             // for large databases with many tables, we can timeout the slot while refreshing schema
             // so we need to start a background thread that just responds to keep alive

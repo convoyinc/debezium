@@ -167,9 +167,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             } else {
                 Long latestFlushedLsn = slotInfo.latestFlushedLsn();
                 this.defaultStartingPos = latestFlushedLsn < xlogStart.get() ? latestFlushedLsn : xlogStart.get();
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("found previous flushed LSN '{}'", ReplicationConnection.format(latestFlushedLsn));
-                }
+                LOGGER.info("found previous flushed LSN '{}'", ReplicationConnection.format(latestFlushedLsn));
             }
         } catch (SQLException e) {
             throw new JdbcConnectionException(e);
