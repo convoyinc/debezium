@@ -607,11 +607,11 @@ public class PostgresValueConverter extends JdbcValueConverters {
         logger.info("function hit");
         if (data instanceof Long) {
             logger.info("Inside if statement");
-            logger.info("data ", ${data});
+            logger.info("data ", data.toString());
             LocalDateTime localDateTime = nanosToLocalDateTimeUTC((Long) data);
-            logger.info("localDateTime", localDateTime);
+            logger.info("localDateTime", localDateTime.toString());
             data = OffsetDateTime.of(localDateTime, ZoneOffset.UTC);
-            // logger.info(data);
+            logger.info("data again", data.toString());
         }
         else if (data instanceof java.util.Date) {
             logger.info("Inside else statement");
