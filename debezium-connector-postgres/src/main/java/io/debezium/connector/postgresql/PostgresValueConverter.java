@@ -607,18 +607,18 @@ public class PostgresValueConverter extends JdbcValueConverters {
         logger.info("function hit");
         if (data instanceof Long) {
             logger.info("Inside if statement");
-            logger.info(data);
+            // logger.info(data);
             LocalDateTime localDateTime = nanosToLocalDateTimeUTC((Long) data);
-            logger.info(localDateTime);
+            // logger.info(localDateTime);
             data = OffsetDateTime.of(localDateTime, ZoneOffset.UTC);
-            logger.info(data);
+            // logger.info(data);
         }
         else if (data instanceof java.util.Date) {
             logger.info("Inside else statement");
             // any Date like subclasses will be given to us by the JDBC driver, which uses the local VM TZ, so we need to go
             // back to GMT
             data = OffsetDateTime.ofInstant(((Date) data).toInstant(), ZoneOffset.UTC);
-            logger.info(data);
+            // logger.info(data);
         }
 
         return super.convertTimestampWithZone(column, fieldDefn, data);
