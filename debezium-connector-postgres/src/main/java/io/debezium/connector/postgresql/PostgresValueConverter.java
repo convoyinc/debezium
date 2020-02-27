@@ -605,6 +605,8 @@ public class PostgresValueConverter extends JdbcValueConverters {
     @Override
     protected Object convertTimestampWithZone(Column column, Field fieldDefn, Object data) {
         logger.info("function hit");
+        logger.info("column ", column.toString());
+        logger.info("fieldDefn ", fieldDefn.toString());
         if (data instanceof Long) {
             logger.info("Inside if statement");
             logger.info("data ", data.toString());
