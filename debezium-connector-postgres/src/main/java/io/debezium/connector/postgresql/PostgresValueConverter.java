@@ -609,11 +609,11 @@ public class PostgresValueConverter extends JdbcValueConverters {
         logger.info("fieldDefn ", fieldDefn.toString());
         if (data instanceof Long) {
             logger.info("Inside if statement");
-            logger.info("data ", data.toString());
+            logger.info("data {}", data);
             LocalDateTime localDateTime = nanosToLocalDateTimeUTC((Long) data);
-            logger.info("localDateTime", localDateTime.toString());
+            logger.info("localDateTime {}", localDateTime);
             data = OffsetDateTime.of(localDateTime, ZoneOffset.UTC);
-            logger.info("data again", data.toString());
+            logger.info("data again {}", data);
         }
         else if (data instanceof java.util.Date) {
             logger.info("Inside else statement");
