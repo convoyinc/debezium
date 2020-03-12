@@ -172,13 +172,16 @@ public class PostgresConnectorTask extends BaseSourceTask {
             }
             // Otherwise, if this LSN is larger than the last LSN, then we've fully processed the events
             // with the previously seen LSN.
-            // TODO - Investigate more here, since it seems LSNs can come in out of order
             else if (recordLsn > previousLsn) {
                 // Update the last completely processed lsn to the previous batch's lsn
                 lastCompletelyProcessedLsn = previousLsn;
 
                 // Update previous lsn for comparison when processing the next batch
                 previousLsn = recordLsn;
+            }
+            // Otherwise, if this LSN is before the previously seen LSN, log that the LSN is out of order
+            else if (recordLsn < previousLsn) {
+                logger.warn("commitRecord received LSN in decreasing order: saw {} then {}", LogSequenceNumber.valueOf(previousLsn), LogSequenceNumber.valueOf(recordLsn));
             }
         }
     }
