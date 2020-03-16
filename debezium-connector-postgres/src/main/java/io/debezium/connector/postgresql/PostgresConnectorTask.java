@@ -157,7 +157,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
                 logger.info("[LSN_DEBUG] Flushing LSN for connector {}: {}", taskName, LogSequenceNumber.valueOf(earliestUnprocessedLsn));
                 producer.commit(earliestUnprocessedLsn);
             } else {
-
+                logger.info("[LSN_DEBUG] commit called without any new records");
             }
         }
     }
@@ -178,11 +178,10 @@ public class PostgresConnectorTask extends BaseSourceTask {
             }
         }
 
-        return events
-            .stream()
-            .map(ChangeEvent::getRecord)
-            .peek(pendingLsnStore::recordPolledLsn)
-            .collect(Collectors.toList());
+        List<SourceRecord> records = events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
+        pendingLsnStore.recordPolledLsns(records);
+
+        return records;
     }
 
     @Override

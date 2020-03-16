@@ -4,9 +4,10 @@
  * Licensed under the Apache Software License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
  */
 
- package io.debezium.connector.postgresql;
+package io.debezium.connector.postgresql;
 
 import java.io.StringWriter;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,6 +30,10 @@ public class PostgresPendingLsnStore {
                 return count + 1;
             }
         });
+    }
+
+    public void recordPolledLsns(Collection<SourceRecord> records) {
+        records.forEach(this::recordPolledLsn);
     }
 
     public void recordProcessedLsn(SourceRecord record) throws IllegalStateException {
