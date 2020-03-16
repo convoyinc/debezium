@@ -41,6 +41,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final AtomicBoolean running = new AtomicBoolean(false);
 
+    private String taskName = "";
     private String databaseName = "";
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
@@ -62,6 +63,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         this.databaseName = connectorConfig.databaseName();
+        this.taskName = connectorConfig.getLogicalName();
 
         TypeRegistry typeRegistry;
         Charset databaseCharset;
@@ -151,7 +153,11 @@ public class PostgresConnectorTask extends BaseSourceTask {
         if (running.get()) {
             Long earliestUnprocessedLsn = pendingLsnStore.getEarliestUnprocessedLsn();
             if (earliestUnprocessedLsn != null) {
+                logger.info("[LSN_DEBUG] Pending LSNs for connector {}: {}", taskName, pendingLsnStore);
+                logger.info("[LSN_DEBUG] Flushing LSN for connector {}: {}", taskName, LogSequenceNumber.valueOf(earliestUnprocessedLsn));
                 producer.commit(earliestUnprocessedLsn);
+            } else {
+
             }
         }
     }

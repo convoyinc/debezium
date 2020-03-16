@@ -6,10 +6,12 @@
 
  package io.debezium.connector.postgresql;
 
+import java.io.StringWriter;
 import java.util.Enumeration;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.kafka.connect.source.SourceRecord;
+import org.postgresql.replication.LogSequenceNumber;
 
 public class PostgresPendingLsnStore {
     private final ConcurrentHashMap<Long, Integer> lsnsInProgress = new ConcurrentHashMap<>();
@@ -63,6 +65,16 @@ public class PostgresPendingLsnStore {
         }
 
         return earliestLsn;
+    }
+
+    public String toString() {
+        StringWriter sw = new StringWriter(50 + lsnsInProgress.size() * 22);
+        sw.append("PostgresPendingLsnStore (");
+        sw.append(Integer.toString(lsnsInProgress.size()));
+        sw.append(" items) [");
+        lsnsInProgress.forEach((lsn, count) -> sw.append(LogSequenceNumber.valueOf(lsn) + "=" + count + "; "));
+        sw.append("]");
+        return sw.toString();
     }
 
     private Long getLsnFromRecord(SourceRecord record) {
