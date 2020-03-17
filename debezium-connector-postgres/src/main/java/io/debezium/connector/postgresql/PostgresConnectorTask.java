@@ -152,10 +152,14 @@ public class PostgresConnectorTask extends BaseSourceTask {
     public void commit() throws InterruptedException {
         if (running.get()) {
             Long earliestUnprocessedLsn = pendingLsnStore.getEarliestUnprocessedLsn();
+            Long largestProcessedLsn = pendingLsnStore.getLargestProcessedLsn();
             if (earliestUnprocessedLsn != null) {
                 logger.info("[LSN_DEBUG] Pending LSNs for connector {}: {}", taskName, pendingLsnStore);
                 logger.info("[LSN_DEBUG] Flushing LSN for connector {}: {}", taskName, LogSequenceNumber.valueOf(earliestUnprocessedLsn));
                 producer.commit(earliestUnprocessedLsn);
+            } else if (largestProcessedLsn != null) {
+                logger.info("[LSN_DEBUG] Committing with no pending LSNs, so flushing the largest seen so far for connector {}: {}", taskName, LogSequenceNumber.valueOf(largestProcessedLsn));
+                producer.commit(largestProcessedLsn);
             } else {
                 logger.info("[LSN_DEBUG] commit called without any new records");
             }

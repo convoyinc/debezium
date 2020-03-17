@@ -10,12 +10,16 @@ import java.io.StringWriter;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.kafka.connect.source.SourceRecord;
 import org.postgresql.replication.LogSequenceNumber;
 
 public class PostgresPendingLsnStore {
+    private final long LARGEST_PROCESSED_LSN_UNSET = -1;
+
     private final ConcurrentHashMap<Long, Integer> lsnsInProgress = new ConcurrentHashMap<>();
+    private final AtomicLong largestProcessedLsn = new AtomicLong(LARGEST_PROCESSED_LSN_UNSET);
 
     public void recordPolledLsn(SourceRecord record) {
         Long lsn = getLsnFromRecord(record);
@@ -51,8 +55,14 @@ public class PostgresPendingLsnStore {
                 return count - 1;
             }
         });
+
+        largestProcessedLsn.updateAndGet(currentLargestLsn -> Math.max(currentLargestLsn, lsn));
     }
 
+    /**
+     * Get the earliest polled LSN from an event that has yet to be committed to Kafka.
+     * @return the Long lsn value, or null if there are no unprocessed LSNs
+     */
     public Long getEarliestUnprocessedLsn() {
         // If there are no elements, return null
         Enumeration<Long> lsnIterator = lsnsInProgress.keys();
@@ -70,6 +80,19 @@ public class PostgresPendingLsnStore {
         }
 
         return earliestLsn;
+    }
+
+    /**
+     * Get the largest LSN from an event comitted to Kafka so far.
+     * @return the Long lsn value, or null if there are no events that have been processed yet.
+     */
+    public Long getLargestProcessedLsn() {
+        Long value = largestProcessedLsn.get();
+        if (value == LARGEST_PROCESSED_LSN_UNSET) {
+            return null;
+        } else {
+            return value;
+        }
     }
 
     public String toString() {
