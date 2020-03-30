@@ -151,7 +151,9 @@ public class PostgresConnectorTask extends BaseSourceTask {
     @Override
     public void commit() throws InterruptedException {
         if (running.get()) {
+            logger.info("[LSN_DEBUG] Pending LSN Store state (before): {}", pendingLsnStore);
             Long largestProcessedLsn = pendingLsnStore.getLargestProcessedLsn();
+            logger.info("[LSN_DEBUG] Pending LSN Store state (after): {}", pendingLsnStore);
             if (largestProcessedLsn != null) {
                 logger.info("[LSN_DEBUG] Committing the largest processed LSN so far for connector {}: {}", taskName, LogSequenceNumber.valueOf(largestProcessedLsn));
                 producer.commit(largestProcessedLsn);
