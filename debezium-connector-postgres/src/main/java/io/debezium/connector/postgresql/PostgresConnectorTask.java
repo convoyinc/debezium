@@ -151,9 +151,9 @@ public class PostgresConnectorTask extends BaseSourceTask {
     @Override
     public void commit() throws InterruptedException {
         if (running.get()) {
-            Long largestProcessedLsn = pendingLsnStore.getLargestProcessedLsn();
-            if (largestProcessedLsn != null) {
-                logger.info("[LSN_DEBUG] Committing the largest processed LSN so far for connector {}: {}", taskName, LogSequenceNumber.valueOf(largestProcessedLsn));
+            Long fullyProcessedLsn = pendingLsnStore.getFullyProcessedLsn();
+            if (fullyProcessedLsn != null) {
+                logger.info("[LSN_DEBUG] Committing the largest fully processed LSN so far for connector {}: {}", taskName, LogSequenceNumber.valueOf(fullyProcessedLsn));
                 producer.commit(largestProcessedLsn);
             } else {
                 logger.info("[LSN_DEBUG] commit called without any new records");

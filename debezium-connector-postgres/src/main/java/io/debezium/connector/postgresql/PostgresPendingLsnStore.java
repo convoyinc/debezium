@@ -64,10 +64,10 @@ public class PostgresPendingLsnStore {
     }
 
     /**
-     * Get the largest LSN from an event comitted to Kafka so far.
+     * Get the largest LSN which has been processed, and for which all events before it have been processed.
      * @return the Long lsn value, or null if there are no events that have been processed yet.
      */
-    public Long getLargestProcessedLsn() {
+    public Long getFullyProcessedLsn() {
         Long earliestUnprocessedLsn = getEarliestUnprocessedLsn();
         Long largestProcessedLsn = getLargestProcessedLsnLessThan(earliestUnprocessedLsn);
         removeProcessedLsnsLessThan(largestProcessedLsn);
@@ -133,7 +133,9 @@ public class PostgresPendingLsnStore {
     }
 
     /**
-     * 
+     * Removes all processed lsns lower than the passed upper bound. This is a clean-up
+     * operation. The passed LSN should be the largest LSN that we've processed everything
+     * up through.
      */
     private void removeProcessedLsnsLessThan(Long upperBound) {
         if (upperBound == null) {
