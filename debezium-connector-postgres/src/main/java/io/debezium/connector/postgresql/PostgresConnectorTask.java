@@ -41,17 +41,12 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final AtomicBoolean running = new AtomicBoolean(false);
 
+    private String taskName = "";
     private String databaseName = "";
     private PostgresTaskContext taskContext;
     private RecordsProducer producer;
 
-    private volatile Long previousLsn;
-
-    /**
-     * In case of wal2json, all records of one TX will be sent with the same LSN. This is the last LSN that was
-     * completely processed, i.e. we've seen all events originating from that TX.
-     */
-    private volatile Long lastCompletelyProcessedLsn;
+    private final PostgresPendingLsnStore pendingLsnStore = new PostgresPendingLsnStore();
 
     /**
      * A queue with change events filled by the snapshot and streaming producers, consumed
@@ -68,6 +63,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
 
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         this.databaseName = connectorConfig.databaseName();
+        this.taskName = connectorConfig.getLogicalName();
 
         TypeRegistry typeRegistry;
         Charset databaseCharset;
@@ -155,32 +151,19 @@ public class PostgresConnectorTask extends BaseSourceTask {
     @Override
     public void commit() throws InterruptedException {
         if (running.get()) {
-            if (lastCompletelyProcessedLsn != null) {
-                producer.commit(lastCompletelyProcessedLsn);
+            Long fullyProcessedLsn = pendingLsnStore.getFullyProcessedLsn();
+            if (fullyProcessedLsn != null) {
+                logger.info("[LSN_DEBUG] Committing the largest fully processed LSN so far for connector {}: {}", taskName, LogSequenceNumber.valueOf(fullyProcessedLsn));
+                producer.commit(fullyProcessedLsn);
+            } else {
+                logger.info("[LSN_DEBUG] commit called without any new records");
             }
         }
     }
 
     @Override
     public void commitRecord(SourceRecord record) throws InterruptedException {
-        Long recordLsn = (Long) record.sourceOffset().get(SourceInfo.LSN_KEY);
-
-        if (recordLsn != null) {
-            // If this is the first LSN we're seeing, just track it for comparing against the next record
-            if (previousLsn == null) {
-                previousLsn = recordLsn;
-            }
-            // Otherwise, if this LSN is larger than the last LSN, then we've fully processed the events
-            // with the previously seen LSN.
-            // TODO - Investigate more here, since it seems LSNs can come in out of order
-            else if (recordLsn > previousLsn) {
-                // Update the last completely processed lsn to the previous batch's lsn
-                lastCompletelyProcessedLsn = previousLsn;
-
-                // Update previous lsn for comparison when processing the next batch
-                previousLsn = recordLsn;
-            }
-        }
+        pendingLsnStore.recordProcessedLsn(record);
     }
 
     @Override
@@ -193,7 +176,11 @@ public class PostgresConnectorTask extends BaseSourceTask {
                 logger.info("[LSN_DEBUG] {} - Polling {} events, with last event's lsn ending at: {}", this.databaseName, events.size(), LogSequenceNumber.valueOf(lastLsn));
             }
         }
-        return events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
+
+        List<SourceRecord> records = events.stream().map(ChangeEvent::getRecord).collect(Collectors.toList());
+        pendingLsnStore.recordPolledLsns(records);
+
+        return records;
     }
 
     @Override
