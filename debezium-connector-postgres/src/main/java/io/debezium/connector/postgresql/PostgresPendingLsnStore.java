@@ -98,7 +98,8 @@ public class PostgresPendingLsnStore {
     }
 
     /**
-     * Get the earliest polled LSN from an event that has yet to be committed to Kafka.
+     * Get the largest committed LSN less than the passed upper bound. If no
+     * upper bound is passed, then just get the largest committed LSN.
      * @param upperBound
      * @return the Long lsn value, or null if there are no unprocessed LSNs
      */
