@@ -128,7 +128,11 @@ public abstract class BaseSourceTask extends SourceTask {
         }
 
         try {
-            return doPoll();
+            List<SourceRecord> polledRecords = doPoll();
+            if (coordinator != null) {
+                coordinator.onRecordsPolled(polledRecords);
+            }
+            return polledRecords;
         }
         catch (RetriableException e) {
             stop(true);
@@ -214,9 +218,8 @@ public abstract class BaseSourceTask extends SourceTask {
 
     @Override
     public void commitRecord(SourceRecord record) throws InterruptedException {
-        Map<String, ?> currentOffset = record.sourceOffset();
-        if (currentOffset != null) {
-            this.lastOffset = currentOffset;
+        if (coordinator != null) {
+            coordinator.onRecordCommitted(record);
         }
     }
 
@@ -226,8 +229,8 @@ public abstract class BaseSourceTask extends SourceTask {
 
         if (locked) {
             try {
-                if (coordinator != null && lastOffset != null) {
-                    coordinator.commitOffset(lastOffset);
+                if (coordinator != null) {
+                    coordinator.commitOffset();
                 }
             }
             finally {

@@ -6,11 +6,12 @@
 package io.debezium.pipeline;
 
 import java.time.Duration;
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.connect.source.SourceConnector;
+import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,6 +62,7 @@ public class ChangeEventSourceCoordinator {
 
     private SnapshotChangeEventSourceMetrics snapshotMetrics;
     private StreamingChangeEventSourceMetrics streamingMetrics;
+    private ChangeEventSourcePendingOffsetStore pendingOffsetStore;
 
     public ChangeEventSourceCoordinator(OffsetContext previousOffset, ErrorHandler errorHandler, Class<? extends SourceConnector> connectorType,
                                         CommonConnectorConfig connectorConfig,
@@ -102,6 +104,11 @@ public class ChangeEventSourceCoordinator {
 
                 if (running && snapshotResult.isCompletedOrSkipped()) {
                     streamingSource = changeEventSourceFactory.getStreamingChangeEventSource(snapshotResult.getOffset());
+                    if (streamingSource.shouldTrackOffsets()) {
+                        pendingOffsetStore = new ChangeEventSourcePendingOffsetStore(
+                                streamingSource::getSourceOffsetIdentifier,
+                                streamingSource::convertSourceOffsetToString);
+                    }
                     eventDispatcher.setEventListener(streamingMetrics);
                     streamingMetrics.connected(true);
                     LOGGER.info("Starting streaming");
@@ -122,8 +129,21 @@ public class ChangeEventSourceCoordinator {
         });
     }
 
-    public void commitOffset(Map<String, ?> offset) {
-        if (streamingSource != null && offset != null) {
+    public void onRecordsPolled(List<SourceRecord> records) {
+        if (streamingSource != null && pendingOffsetStore != null) {
+            pendingOffsetStore.recordPolledRecords(records);
+        }
+    }
+
+    public void onRecordCommitted(SourceRecord record) {
+        if (streamingSource != null && pendingOffsetStore != null) {
+            pendingOffsetStore.recordProcessedRecord(record);
+        }
+    }
+
+    public void commitOffset() {
+        if (streamingSource != null && pendingOffsetStore != null) {
+            Long offset = pendingOffsetStore.getFullyProcessedOffset();
             streamingSource.commitOffset(offset);
         }
     }

@@ -5,7 +5,7 @@
  */
 package io.debezium.pipeline.source.spi;
 
-import java.util.Map;
+import org.apache.kafka.connect.source.SourceRecord;
 
 /**
  * A change event source that emits events from a DB log, such as MySQL's binlog or similar.
@@ -27,11 +27,23 @@ public interface StreamingChangeEventSource extends ChangeEventSource {
      */
     void execute(ChangeEventSourceContext context) throws InterruptedException;
 
+    default boolean shouldTrackOffsets() {
+        return false;
+    }
+
+    default Long getSourceOffsetIdentifier(SourceRecord record) {
+        return null;
+    }
+
+    default String convertSourceOffsetToString(Long offset) {
+        return String.valueOf(offset);
+    }
+
     /**
      * Commits the given offset with the source database. Used by some connectors
      * like Postgres and Oracle to indicate how far the source TX log can be
      * discarded.
      */
-    default void commitOffset(Map<String, ?> offset) {
+    default void commitOffset(Long offset) {
     }
 }

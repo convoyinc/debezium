@@ -6,12 +6,12 @@
 package io.debezium.connector.postgresql;
 
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.source.SourceRecord;
 import org.postgresql.core.BaseConnection;
 import org.postgresql.replication.LogSequenceNumber;
 import org.slf4j.Logger;
@@ -263,17 +263,31 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     }
 
     @Override
-    public void commitOffset(Map<String, ?> offset) {
+    public boolean shouldTrackOffsets() {
+        return true;
+    }
+
+    @Override
+    public Long getSourceOffsetIdentifier(SourceRecord record) {
+        return (Long) record.sourceOffset().get(SourceInfo.LSN_KEY);
+    }
+
+    @Override
+    public String convertSourceOffsetToString(Long offset) {
+        return LogSequenceNumber.valueOf(offset).toString();
+    }
+
+    @Override
+    public void commitOffset(Long offset) {
         try {
             ReplicationStream replicationStream = this.replicationStream.get();
-            final Long lsn = (Long) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY);
 
-            if (replicationStream != null && lsn != null) {
+            if (replicationStream != null && offset != null) {
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Flushing LSN to server: {}", LogSequenceNumber.valueOf(lsn));
+                    LOGGER.debug("Flushing LSN to server: {}", convertSourceOffsetToString(offset));
                 }
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
-                replicationStream.flushLsn(lsn);
+                replicationStream.flushLsn(offset);
             }
             else {
                 LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
