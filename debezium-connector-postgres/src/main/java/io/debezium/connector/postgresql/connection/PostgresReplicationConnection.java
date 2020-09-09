@@ -260,18 +260,13 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             @Override
             public void read(ReplicationMessageProcessor processor) throws SQLException, InterruptedException {
                 ByteBuffer read = stream.read();
-                // the lsn we started from is inclusive, so we need to avoid sending back the same message twice
-                if (lsnLong >= stream.getLastReceiveLSN().asLong()) {
-                    return;
-                }
                 deserializeMessages(read, processor);
             }
 
             @Override
             public void readPending(ReplicationMessageProcessor processor) throws SQLException, InterruptedException {
                 ByteBuffer read = stream.readPending();
-                // the lsn we started from is inclusive, so we need to avoid sending back the same message twice
-                if (read == null ||  lsnLong >= stream.getLastReceiveLSN().asLong()) {
+                if (read == null) {
                     return;
                 }
                 deserializeMessages(read, processor);
