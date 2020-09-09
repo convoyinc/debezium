@@ -161,8 +161,12 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 }
             });
 
-            if (shouldCreateSlot || !slotInfo.hasValidFlushedLsn()) {
-                // this is a new slot or we weren't able to read a valid flush LSN pos, so we always start from the xlog pos that was reported
+            if(!shouldCreateSlot && !slotInfo.hasValidFlushedLsn()) {
+                // If this isn't a new slot, and we weren't able to get the confirmed flush LSN, fail and try again later
+                throw new IllegalStateException("Unable to get confirmed flush LSN of existing replication slot");
+            }
+            else if (shouldCreateSlot) {
+                // this is a new slot so we always start from the xlog pos that was reported
                 this.defaultStartingPos = xlogStart.get();
             } else {
                 Long latestFlushedLsn = slotInfo.latestFlushedLsn();
