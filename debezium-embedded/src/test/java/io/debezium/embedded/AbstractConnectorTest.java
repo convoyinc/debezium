@@ -8,6 +8,7 @@ package io.debezium.embedded;
 import static org.fest.assertions.Assertions.assertThat;
 import static org.junit.Assert.fail;
 
+import java.lang.management.ManagementFactory;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,12 +44,19 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.storage.Converter;
 import org.apache.kafka.connect.storage.FileOffsetBackingStore;
 import org.apache.kafka.connect.storage.OffsetStorageReaderImpl;
+import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.management.InstanceNotFoundException;
+import javax.management.JMException;
+import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
+import javax.management.ObjectName;
 
 import io.debezium.config.Configuration;
 import io.debezium.data.VerifyRecord;
@@ -728,4 +736,52 @@ public abstract class AbstractConnectorTest implements Testing {
             offsetStore.stop();
         }
     }
+
+    public static void waitForStreamingRunning(String connector, String server) throws InterruptedException {
+        waitForStreamingRunning(connector, server, getStreamingNamespace());
+    }
+
+    public static int waitTimeForRecords() {
+        return 3;
+    }
+
+    public static void waitForStreamingRunning(String connector, String server, String contextName) {
+        Awaitility.await()
+                .alias("Streaming was not started on time")
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .atMost(waitTimeForRecords() * 30, TimeUnit.SECONDS)
+                .ignoreException(InstanceNotFoundException.class)
+                .until(() -> isStreamingRunning(connector, server, contextName));
+    }
+
+    public static void waitForConnectorShutdown(String connector, String server) {
+        Awaitility.await()
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .atMost(waitTimeForRecords() * 30, TimeUnit.SECONDS)
+                .until(() -> !isStreamingRunning(connector, server));
+    }
+
+    public static boolean isStreamingRunning(String connector, String server) {
+        return isStreamingRunning(connector, server, getStreamingNamespace());
+    }
+
+    public static boolean isStreamingRunning(String connector, String server, String contextName) {
+        final MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
+
+        try {
+            return (boolean) mbeanServer.getAttribute(getStreamingMetricsObjectName(connector, server, contextName), "Connected");
+        }
+        catch (JMException ignored) {
+        }
+        return false;
+    }
+
+    public static ObjectName getStreamingMetricsObjectName(String connector, String server, String context) throws MalformedObjectNameException {
+        return new ObjectName("debezium." + connector + ":type=connector-metrics,context=" + context + ",server=" + server);
+    }
+
+    protected static String getStreamingNamespace() {
+        return "streaming";
+    }
+
 }
