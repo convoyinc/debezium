@@ -93,7 +93,10 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
     }
 
     @Before
-    public void beforeEach() {
+    public void beforeEach() {        
+        //TestHelper.dropDefaultReplicationSlot();
+        //TestHelper.dropPublication();
+        
         outboxEventRouter = new EventRouter<>();
         outboxEventRouter.configure(Collections.emptyMap());
 
