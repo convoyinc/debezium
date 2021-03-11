@@ -94,23 +94,14 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
 
     @Before
     public void beforeEach() {        
-        //TestHelper.dropDefaultReplicationSlot();
-        //TestHelper.dropPublication();
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.dropPublication();
         
         outboxEventRouter = new EventRouter<>();
         outboxEventRouter.configure(Collections.emptyMap());
 
         TestHelper.execute(SETUP_OUTBOX_SCHEMA);
         TestHelper.execute(SETUP_OUTOBOX_TABLE);
-
-        Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
-                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
-                .with(PostgresConnectorConfig.SCHEMA_WHITELIST, "outboxsmtit")
-                .with(PostgresConnectorConfig.TABLE_WHITELIST, "outboxsmtit\\.outbox");
-        start(PostgresConnector.class, configBuilder.build());
-
-        assertConnectorIsRunning();
     }
 
     @After
@@ -122,6 +113,8 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
 
     @Test
     public void shouldConsumeRecordsFromInsert() throws Exception {
+        startConnectorWithInitialSnapshotRecord();
+
         TestHelper.execute(createEventInsert(
                 UUID.fromString("59a42efd-b015-44a9-9dde-cb36d9002425"),
                 "UserCreated",
@@ -188,7 +181,43 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
     }
 
     @Test
+    @FixFor("DBZ-2014")
+    public void shouldSendEventTypeAsValue() throws Exception {
+        startConnectorWithInitialSnapshotRecord();
+
+        TestHelper.execute(createEventInsert(
+                UUID.fromString("d4da2428-8b19-11ea-bc55-0242ac130003"),
+                "UserCreated",
+                "User",
+                "9948fcad",
+                "{\"email\": \"gh@mefi.in\"}",
+                ""));
+
+        final Map<String, String> config = new HashMap<>();
+        config.put(
+                "table.fields.additional.placement",
+                "type:envelope:eventType");
+        outboxEventRouter.configure(config);
+
+        SourceRecords actualRecords = consumeRecordsByTopic(1);
+        assertThat(actualRecords.topics().size()).isEqualTo(1);
+
+        SourceRecord newEventRecord = actualRecords.recordsForTopic(topicName("outboxsmtit.outbox")).get(0);
+        SourceRecord routedEvent = outboxEventRouter.apply(newEventRecord);
+
+        assertThat(routedEvent).isNotNull();
+        assertThat(routedEvent.topic()).isEqualTo("outbox.event.User");
+
+        Struct valueStruct = requireStruct(routedEvent.value(), "test payload");
+        assertThat(valueStruct.getString("eventType")).isEqualTo("UserCreated");
+        JsonNode payload = (new ObjectMapper()).readTree(valueStruct.getString("payload"));
+        assertThat(payload.get("email").asText()).isEqualTo("gh@mefi.in");
+    }
+
+    @Test
     public void shouldRespectJsonFormatAsString() throws Exception {
+        startConnectorWithInitialSnapshotRecord();
+
         TestHelper.execute(createEventInsert(
                 UUID.fromString("f9171eb6-19f3-4579-9206-0e179d2ebad7"),
                 "UserCreated",
@@ -210,6 +239,8 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
 
     @Test
     public void shouldSupportAllFeatures() throws Exception {
+        startConnectorWithNoSnapshot();
+
         outboxEventRouter = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
         config.put("table.field.event.schema.version", "version");
@@ -318,6 +349,8 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
     @Test
     @FixFor("DBZ-1320")
     public void shouldNotProduceTombstoneEventForNullPayload() throws Exception {
+        startConnectorWithNoSnapshot();
+
         outboxEventRouter = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
         config.put("table.field.event.schema.version", "version");
@@ -380,6 +413,8 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
     @Test
     @FixFor("DBZ-1320")
     public void shouldProduceTombstoneEventForNullPayload() throws Exception {
+        startConnectorWithNoSnapshot();
+
         outboxEventRouter = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
         config.put("table.field.event.schema.version", "version");
@@ -441,6 +476,8 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
     @Test
     @FixFor("DBZ-1320")
     public void shouldProduceTombstoneEventForEmptyPayload() throws Exception {
+        startConnectorWithNoSnapshot();
+        
         outboxEventRouter = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
         config.put("route.tombstone.on.empty.payload", "true");
@@ -505,7 +542,7 @@ public class OutboxEventRouterIT extends AbstractConnectorTest {
     private void startConnectorWithNoSnapshot() throws InterruptedException {
         Configuration.Builder configBuilder = getConfigurationBuilder(SnapshotMode.NEVER);
         start(PostgresConnector.class, configBuilder.build());
-        waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
+        assertConnectorIsRunning();
     }
 
     private static Configuration.Builder getConfigurationBuilder(SnapshotMode snapshotMode) {

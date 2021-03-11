@@ -232,4 +232,22 @@ public final class TestHelper {
     protected static int waitTimeForRecords() {
         return Integer.parseInt(System.getProperty(TEST_PROPERTY_PREFIX + "records.waittime", "2"));
     }
+
+    protected static void dropDefaultReplicationSlot() {
+        try {
+            execute("SELECT pg_drop_replication_slot('" + ReplicationConnection.Builder.DEFAULT_SLOT_NAME + "')");
+        }
+        catch (Exception e) {
+            System.out.println("Error while dropping default replication slot" + e.toString());
+        }
+    }
+
+    protected static void dropPublication() {
+        try {
+            execute("DROP PUBLICATION pgoutput");
+        }
+        catch (Exception e) {
+            System.out.println("Error while dropping publication: 'pgoutput'" + e.toString());
+        }
+    }
 }

@@ -100,7 +100,7 @@ public abstract class AbstractConnectorTest implements Testing {
 
     @Before
     public final void initializeConnectorTestFramework() {
-        stopConnector();
+        stopConnector(null);
         LoggingContext.forConnector(getClass().getSimpleName(), "", "test");
         keyJsonConverter = new JsonConverter();
         valueJsonConverter = new JsonConverter();
