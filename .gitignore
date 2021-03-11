@@ -16,6 +16,7 @@ deploy/
 target/
 mods/
 *.swp
+*.jar
 epom
 log
 npm-debug.log
