@@ -5,7 +5,14 @@
  */
 package io.debezium.transforms.outbox;
 
-import io.debezium.data.Envelope;
+import static org.apache.kafka.connect.transforms.util.Requirements.requireStruct;
+import static org.fest.assertions.Assertions.assertThat;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -14,13 +21,15 @@ import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.header.Header;
 import org.apache.kafka.connect.header.Headers;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.apache.kafka.connect.transforms.util.Requirements.requireStruct;
-import static org.fest.assertions.Assertions.assertThat;
+import io.debezium.connector.AbstractSourceInfo;
+import io.debezium.data.Envelope;
+import io.debezium.data.VerifyRecord;
+import io.debezium.doc.FixFor;
+import io.debezium.time.Timestamp;
 
 /**
  * Unit tests for {@link EventRouter}
@@ -28,6 +37,9 @@ import static org.fest.assertions.Assertions.assertThat;
  * @author Renato mefi (gh@mefi.in)
  */
 public class EventRouterTest {
+
+    @Rule
+    public ExpectedException exceptionRule = ExpectedException.none();
 
     @Test
     public void canSkipTombstone() {
@@ -77,6 +89,125 @@ public class EventRouterTest {
         final SourceRecord eventRouted = router.apply(eventRecord);
 
         assertThat(eventRouted).isNull();
+    }
+
+    @Test
+    @FixFor("DBZ-1383")
+    public void canSkipMessagesWithoutDebeziumCdcEnvelopeDueToMissingSchemaName() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        router.configure(config);
+
+        Schema valueSchema = SchemaBuilder.struct()
+                .field(AbstractSourceInfo.TIMESTAMP_KEY, Schema.INT64_SCHEMA)
+                .build();
+
+        Struct value = new Struct(valueSchema);
+        value.put(AbstractSourceInfo.TIMESTAMP_KEY, Instant.now().toEpochMilli());
+
+        final SourceRecord eventRecord = new SourceRecord(
+                new HashMap<>(),
+                new HashMap<>(),
+                "db.outbox",
+                SchemaBuilder.STRING_SCHEMA,
+                "772590bf-ef2d-4814-b4bf-ddc6f5f8b9c5",
+                valueSchema,
+                value
+        );
+
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isSameAs(eventRecord);
+    }
+
+    @Test
+    public void shouldFailWhenTheSchemaLooksValidButDoesNotHaveTheCorrectFields() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        router.configure(config);
+
+        Schema valueSchema = SchemaBuilder.struct()
+                .name("io.debezium.connector.common.Heartbeat.Envelope")
+                .field(AbstractSourceInfo.TIMESTAMP_KEY, Schema.INT64_SCHEMA)
+                .build();
+
+        Struct value = new Struct(valueSchema);
+        value.put(AbstractSourceInfo.TIMESTAMP_KEY, Instant.now().toEpochMilli());
+
+        final SourceRecord eventRecord = new SourceRecord(
+                new HashMap<>(),
+                new HashMap<>(),
+                "db.outbox",
+                SchemaBuilder.STRING_SCHEMA,
+                "772590bf-ef2d-4814-b4bf-ddc6f5f8b9c5",
+                valueSchema,
+                value
+        );
+
+        exceptionRule.expect(DataException.class);
+        exceptionRule.expectMessage("op is not a valid field name");
+
+        router.apply(eventRecord);
+    }
+
+    @Test
+    @FixFor("DBZ-1383")
+    public void canSkipMessagesWithoutDebeziumCdcEnvelopeDueToMissingSchemaNameSuffix() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        router.configure(config);
+
+        Schema valueSchema = SchemaBuilder.struct()
+                .name("io.debezium.connector.common.Heartbeat")
+                .field(AbstractSourceInfo.TIMESTAMP_KEY, Schema.INT64_SCHEMA)
+                .build();
+
+        Struct value = new Struct(valueSchema);
+        value.put(AbstractSourceInfo.TIMESTAMP_KEY, Instant.now().toEpochMilli());
+
+        final SourceRecord eventRecord = new SourceRecord(
+                new HashMap<>(),
+                new HashMap<>(),
+                "db.outbox",
+                SchemaBuilder.STRING_SCHEMA,
+                "772590bf-ef2d-4814-b4bf-ddc6f5f8b9c5",
+                valueSchema,
+                value
+        );
+
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isSameAs(eventRecord);
+    }
+
+    @Test
+    @FixFor("DBZ-1383")
+    public void canSkipMessagesWithoutDebeziumCdcEnvelopeDueToMissingValueSchema() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        router.configure(config);
+
+        Schema valueSchema = SchemaBuilder.struct()
+                .name("io.debezium.connector.common.Heartbeat")
+                .field(AbstractSourceInfo.TIMESTAMP_KEY, Schema.INT64_SCHEMA)
+                .build();
+
+        Struct value = new Struct(valueSchema);
+        value.put(AbstractSourceInfo.TIMESTAMP_KEY, Instant.now().toEpochMilli());
+
+        final SourceRecord eventRecord = new SourceRecord(
+                new HashMap<>(),
+                new HashMap<>(),
+                "db.outbox",
+                SchemaBuilder.STRING_SCHEMA,
+                "772590bf-ef2d-4814-b4bf-ddc6f5f8b9c5",
+                null,
+                value
+        );
+
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isSameAs(eventRecord);
     }
 
     @Test
@@ -225,7 +356,7 @@ public class EventRouterTest {
         Long expectedTimestamp = 14222264625338L;
 
         Map<String, Schema> extraFields = new HashMap<>();
-        extraFields.put("event_timestamp", Schema.INT64_SCHEMA);
+        extraFields.put("event_timestamp", Timestamp.schema());
 
         Map<String, Object> extraValues = new HashMap<>();
         extraValues.put("event_timestamp", expectedTimestamp);
@@ -259,7 +390,7 @@ public class EventRouterTest {
         final SourceRecord userEventRouted = router.apply(userEventRecord);
 
         assertThat(userEventRouted).isNotNull();
-        assertThat(userEventRouted.topic()).isEqualTo("outbox.event.user");
+        assertThat(userEventRouted.topic()).isEqualTo("outbox.event.User");
 
         final SourceRecord userUpdatedEventRecord = createEventRecord(
                 "ab720dd3-176d-40a6-96f3-6cf961d7df6a",
@@ -271,7 +402,7 @@ public class EventRouterTest {
         final SourceRecord userUpdatedEventRouted = router.apply(userUpdatedEventRecord);
 
         assertThat(userUpdatedEventRouted).isNotNull();
-        assertThat(userUpdatedEventRouted.topic()).isEqualTo("outbox.event.user");
+        assertThat(userUpdatedEventRouted.topic()).isEqualTo("outbox.event.User");
 
         final SourceRecord addressCreatedEventRecord = createEventRecord(
                 "ab720dd3-176d-40a6-96f3-6cf961d7df6a",
@@ -283,7 +414,7 @@ public class EventRouterTest {
         final SourceRecord addressCreatedEventRouted = router.apply(addressCreatedEventRecord);
 
         assertThat(addressCreatedEventRouted).isNotNull();
-        assertThat(addressCreatedEventRouted.topic()).isEqualTo("outbox.event.address");
+        assertThat(addressCreatedEventRouted.topic()).isEqualTo("outbox.event.Address");
     }
 
     @Test
@@ -526,6 +657,179 @@ public class EventRouterTest {
         router.configure(config);
     }
 
+    @Test
+    public void canPassStringKey() {
+        // canSetDefaultMessageKey() duplicates this logic, as the current test assumes the key will be a String
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        router.configure(config);
+
+        final SourceRecord eventRecord = createEventRecord();
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isNotNull();
+        assertThat(eventRouted.keySchema().type()).isEqualTo(Schema.Type.STRING);
+    }
+
+    @Test
+    public void canPassBinaryKey() {
+        final byte[] key = "a binary key".getBytes(StandardCharsets.UTF_8);
+        canPassKeyByType(SchemaBuilder.bytes(), key);
+    }
+
+    @Test
+    public void canPassIntKey() {
+        final int key = 54321;
+        canPassKeyByType(SchemaBuilder.int32(), key);
+    }
+
+    private void canPassKeyByType(SchemaBuilder keyType, Object key) {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        router.configure(config);
+
+        final SourceRecord eventRecord = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                keyType,
+                key,
+                "User",
+                SchemaBuilder.string(),
+                "{}",
+                new HashMap<>(),
+                new HashMap<>());
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isNotNull();
+        assertThat(eventRouted.keySchema().type()).isEqualTo(keyType.type());
+        assertThat(eventRouted.key()).isEqualTo(key);
+    }
+
+    @Test
+    public void canPassBinaryMessage() {
+        final byte[] value = "a binary message".getBytes(StandardCharsets.UTF_8);
+        final String key = "a key";
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        router.configure(config);
+
+        final SourceRecord eventRecord = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                SchemaBuilder.string(),
+                key,
+                "User",
+                SchemaBuilder.bytes(),
+                value,
+                new HashMap<>(),
+                new HashMap<>());
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isNotNull();
+        assertThat(eventRouted.keySchema().type()).isEqualTo(Schema.Type.STRING);
+        assertThat(eventRouted.key()).isEqualTo(key);
+        assertThat(eventRouted.valueSchema().type()).isEqualTo(Schema.Type.STRUCT);
+        Struct valuePassed = (Struct) eventRouted.value();
+        assertThat(valuePassed.get("payload")).isEqualTo(value);
+    }
+
+    @Test
+    public void canMarkAnEventAsDeleted() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        config.put(
+                EventRouterConfigDefinition.FIELDS_ADDITIONAL_PLACEMENT.name(),
+                "is_deleted:envelope:deleted"
+        );
+        config.put(
+                EventRouterConfigDefinition.ROUTE_TOMBSTONE_ON_EMPTY_PAYLOAD.name(),
+                "true"
+        );
+        router.configure(config);
+
+        final Map<String, Schema> extraFields = new HashMap<>();
+        extraFields.put("deleted", Schema.OPTIONAL_BOOLEAN_SCHEMA);
+
+        final Map<String, Object> extraValues = new HashMap<>();
+        extraValues.put("is_deleted", true);
+
+        final SourceRecord eventRecord = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                "10711fa5",
+                "User",
+                "{}",
+                extraFields,
+                extraValues);
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        Struct value = (Struct) eventRouted.value();
+        assertThat(value).isNotNull();
+        assertThat(value.get("deleted")).isEqualTo(true);
+
+        final SourceRecord eventRecordTombstone = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                "10711fa5",
+                "User",
+                "",
+                extraFields,
+                extraValues);
+        final SourceRecord eventRoutedTombstone = router.apply(eventRecordTombstone);
+
+        Struct tombstone = (Struct) eventRoutedTombstone.value();
+        assertThat(tombstone).isNull();
+        VerifyRecord.isValidTombstone(eventRoutedTombstone);
+    }
+
+    @Test
+    public void noTombstoneIfNotConfigured() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        config.put(
+                EventRouterConfigDefinition.FIELDS_ADDITIONAL_PLACEMENT.name(),
+                "is_deleted:envelope:deleted"
+        );
+        router.configure(config);
+
+        final Map<String, Schema> extraFields = new HashMap<>();
+        extraFields.put("deleted", Schema.OPTIONAL_BOOLEAN_SCHEMA);
+
+        final Map<String, Object> extraValues = new HashMap<>();
+        extraValues.put("is_deleted", true);
+
+        final SourceRecord eventRecord = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                "10711fa5",
+                "User",
+                "{}",
+                extraFields,
+                extraValues);
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        Struct value = (Struct) eventRouted.value();
+        assertThat(value).isNotNull();
+        assertThat(value.get("deleted")).isEqualTo(true);
+
+        final SourceRecord eventRecordTombstone = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                "10711fa5",
+                "User",
+                "",
+                extraFields,
+                extraValues);
+        final SourceRecord eventRoutedTombstone = router.apply(eventRecordTombstone);
+
+        Struct tombstone = (Struct) eventRoutedTombstone.value();
+        assertThat(eventRoutedTombstone.key()).isNotNull();
+        assertThat(eventRoutedTombstone.keySchema()).isNotNull();
+        assertThat(tombstone).isNotNull();
+        assertThat(tombstone.get("deleted")).isEqualTo(true);
+        assertThat(eventRoutedTombstone.valueSchema()).isNotNull();
+    }
+
     private SourceRecord createEventRecord() {
         return createEventRecord(
                 "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
@@ -555,20 +859,42 @@ public class EventRouterTest {
     }
 
     private SourceRecord createEventRecord(
-            String eventId,
-            String eventType,
-            String payloadId,
-            String payloadType,
-            String payload,
-            Map<String, Schema> extraFields,
-            Map<String, Object> extraValues
-    ) {
+                                           String eventId,
+                                           String eventType,
+                                           String payloadId,
+                                           String payloadType,
+                                           String payload,
+                                           Map<String, Schema> extraFields,
+                                           Map<String, Object> extraValues) {
+        return createEventRecord(
+                eventId,
+                eventType,
+                SchemaBuilder.string(),
+                payloadId,
+                payloadType,
+                SchemaBuilder.string(),
+                payload,
+                extraFields,
+                extraValues);
+    }
+
+    private SourceRecord createEventRecord(
+                                           String eventId,
+                                           String eventType,
+                                           SchemaBuilder payloadIdSchemaType,
+                                           Object payloadId,
+                                           String payloadType,
+                                           SchemaBuilder payloadSchemaType,
+                                           Object payload,
+                                           Map<String, Schema> extraFields,
+                                           Map<String, Object> extraValues) {
         SchemaBuilder schemaBuilder = SchemaBuilder.struct()
                 .field("id", SchemaBuilder.string())
                 .field("aggregatetype", SchemaBuilder.string())
-                .field("aggregateid", SchemaBuilder.string())
+                .field("aggregateid", payloadIdSchemaType)
                 .field("type", SchemaBuilder.string())
-                .field("payload", SchemaBuilder.string());
+                .field("payload", payloadSchemaType)
+                .field("is_deleted", SchemaBuilder.bool().optional());
 
         extraFields.forEach(schemaBuilder::field);
 

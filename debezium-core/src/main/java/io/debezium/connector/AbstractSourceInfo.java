@@ -19,6 +19,13 @@ import org.apache.kafka.connect.data.Struct;
 public abstract class AbstractSourceInfo {
     public static final String DEBEZIUM_VERSION_KEY = "version";
     public static final String DEBEZIUM_CONNECTOR_KEY = "connector";
+    public static final String SERVER_NAME_KEY = "name";
+    public static final String TIMESTAMP_KEY = "ts_ms";
+    public static final String SNAPSHOT_KEY = "snapshot";
+    public static final String DATABASE_NAME_KEY = "db";
+    public static final String SCHEMA_NAME_KEY = "schema";
+    public static final String TABLE_NAME_KEY = "table";
+    public static final String COLLECTION_NAME_KEY = "collection";
 
     private final String version;
 
