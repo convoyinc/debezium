@@ -12,11 +12,13 @@ activemq-data/
 .checkstyle
 .gradle/
 build/
+build_images/**/output/
 deploy/
 target/
 mods/
 *.swp
 *.jar
+*.tar.gz
 epom
 log
 npm-debug.log

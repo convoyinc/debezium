@@ -1,0 +1,4 @@
+./build.sh
+./docker_image_id.txt
+./build_images/
+./**/target
