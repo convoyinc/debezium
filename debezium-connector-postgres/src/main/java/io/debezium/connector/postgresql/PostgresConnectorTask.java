@@ -8,6 +8,8 @@ package io.debezium.connector.postgresql;
 
 import java.nio.charset.Charset;
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,7 +38,7 @@ import io.debezium.util.LoggingContext;
  * @author Horia Chiorean (hchiorea@redhat.com)
  */
 public class PostgresConnectorTask extends BaseSourceTask {
-
+ 
     private static final String CONTEXT_NAME = "postgres-connector-task";
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -47,6 +49,11 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private RecordsProducer producer;
 
     private final PostgresPendingLsnStore pendingLsnStore = new PostgresPendingLsnStore();
+    private Long idleLsnTimeoutMillis;
+    // The last LSN we actually committed to Postgres
+    private Long lastCommittedLsn;
+    // The time the last LSN was committed
+    private LocalDateTime lastCommittedLsnTime;
 
     /**
      * A queue with change events filled by the snapshot and streaming producers, consumed
@@ -64,6 +71,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         this.databaseName = connectorConfig.databaseName();
         this.taskName = connectorConfig.getLogicalName();
+        this.idleLsnTimeoutMillis = connectorConfig.idleLsnTimeoutMillis();
 
         TypeRegistry typeRegistry;
         Charset databaseCharset;
@@ -153,6 +161,14 @@ public class PostgresConnectorTask extends BaseSourceTask {
         if (running.get()) {
             Long fullyProcessedLsn = pendingLsnStore.getFullyProcessedLsn();
             if (fullyProcessedLsn != null) {
+                // If the LSN hasn't changed, and it's been over the idle timeout since the last change, stop the connector so it can be restarted
+                if(fullyProcessedLsn == lastCommittedLsn && Duration.between(lastCommittedLsnTime, LocalDateTime.now()).toMillis() > this.idleLsnTimeoutMillis) {
+                    logger.error("[LSN_DEBUG] Stopping connector because LSN has not changed in {}ms {}: {}", this.idleLsnTimeoutMillis, taskName, LogSequenceNumber.valueOf(fullyProcessedLsn));
+                    this.stop();
+                } else {
+                    lastCommittedLsn = fullyProcessedLsn;
+                    lastCommittedLsnTime = LocalDateTime.now();
+                }
                 logger.info("[LSN_DEBUG] Committing the largest fully processed LSN so far for connector {}: {}", taskName, LogSequenceNumber.valueOf(fullyProcessedLsn));
                 producer.commit(fullyProcessedLsn);
             } else {
