@@ -483,6 +483,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     protected static final String DATABASE_CONFIG_PREFIX = "database.";
     protected static final int DEFAULT_PORT = 5_432;
     protected static final int DEFAULT_SNAPSHOT_FETCH_SIZE = 10_240;
+    // Set default to be pretty conservative
+    protected static final long DEFAULT_IDLE_LSN_TIMEOUT = TimeUnit.MINUTES.toMillis(30);
     protected static final long DEFAULT_SNAPSHOT_LOCK_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(10);
 
     private static final String TABLE_WHITELIST_NAME = "table.whitelist";
@@ -591,6 +593,15 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                                                      .withWidth(Width.MEDIUM)
                                                      .withImportance(Importance.MEDIUM)
                                                      .withDescription("The maximum number of DB rows that should be loaded into memory while performing a snapshot")
+                                                     .withValidation(Field::isPositiveLong);
+
+    public static final Field IDLE_LSN_TIMEOUT_MS = Field.create("idle.lsn.timeout.ms")
+                                                     .withDisplayName("Idle LSN timeout ms")
+                                                     .withWidth(Width.LONG)
+                                                     .withType(Type.LONG)
+                                                     .withImportance(Importance.MEDIUM)
+                                                     .withDefault(DEFAULT_IDLE_LSN_TIMEOUT)
+                                                     .withDescription("Connector stops if the LSN flushed to Postgres hasn't changed in this amount of time")
                                                      .withValidation(Field::isPositiveLong);
 
     public static final Field SSL_MODE = Field.create(DATABASE_CONFIG_PREFIX + "sslmode")
@@ -840,7 +851,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                                                      SCHEMA_BLACKLIST, TABLE_WHITELIST, TABLE_BLACKLIST,
                                                      COLUMN_BLACKLIST, SNAPSHOT_MODE, TIME_PRECISION_MODE, DECIMAL_HANDLING_MODE, HSTORE_HANDLING_MODE,
                                                      SSL_MODE, SSL_CLIENT_CERT, SSL_CLIENT_KEY_PASSWORD,
-                                                     SSL_ROOT_CERT, SSL_CLIENT_KEY, SNAPSHOT_LOCK_TIMEOUT_MS, ROWS_FETCH_SIZE, SSL_SOCKET_FACTORY,
+                                                     SSL_ROOT_CERT, SSL_CLIENT_KEY, SNAPSHOT_LOCK_TIMEOUT_MS, ROWS_FETCH_SIZE, IDLE_LSN_TIMEOUT_MS, SSL_SOCKET_FACTORY,
                                                      STATUS_UPDATE_INTERVAL_MS, TCP_KEEPALIVE, INCLUDE_UNKNOWN_DATATYPES,
                                                      SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE, SCHEMA_REFRESH_MODE, CommonConnectorConfig.TOMBSTONES_ON_DELETE,
                                                      XMIN_FETCH_INTERVAL, SNAPSHOT_MODE_CLASS);
@@ -950,6 +961,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().getLong(PostgresConnectorConfig.SNAPSHOT_LOCK_TIMEOUT_MS);
     }
 
+
+    protected long idleLsnTimeoutMillis() {
+        return getConfig().getLong(PostgresConnectorConfig.IDLE_LSN_TIMEOUT_MS);
+    }
+
     protected Snapshotter getSnapshotter() {
         return this.snapshotMode.getSnapshotter(getConfig());
     }
@@ -1001,7 +1017,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     Heartbeat.HEARTBEAT_TOPICS_PREFIX);
         Field.group(config, "Connector", TOPIC_SELECTION_STRATEGY, CommonConnectorConfig.POLL_INTERVAL_MS, CommonConnectorConfig.MAX_BATCH_SIZE, CommonConnectorConfig.MAX_QUEUE_SIZE,
                     CommonConnectorConfig.SNAPSHOT_DELAY_MS, CommonConnectorConfig.SNAPSHOT_FETCH_SIZE,
-                    SNAPSHOT_MODE, SNAPSHOT_LOCK_TIMEOUT_MS, TIME_PRECISION_MODE, DECIMAL_HANDLING_MODE, HSTORE_HANDLING_MODE, SCHEMA_REFRESH_MODE, ROWS_FETCH_SIZE);
+                    SNAPSHOT_MODE, SNAPSHOT_LOCK_TIMEOUT_MS, IDLE_LSN_TIMEOUT_MS, TIME_PRECISION_MODE, DECIMAL_HANDLING_MODE, HSTORE_HANDLING_MODE, SCHEMA_REFRESH_MODE, ROWS_FETCH_SIZE);
 
         return config;
     }
