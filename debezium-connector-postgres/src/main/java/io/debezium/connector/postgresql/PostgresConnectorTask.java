@@ -51,7 +51,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
     private final PostgresPendingLsnStore pendingLsnStore = new PostgresPendingLsnStore();
     private Long idleLsnTimeoutMillis;
     // The last LSN we actually committed to Postgres
-    private Long lastCommittedLsn;
+    private Long lastCommittedLsn = -1L;
     // The time the last LSN was committed
     private LocalDateTime lastCommittedLsnTime;
 
@@ -160,19 +160,22 @@ public class PostgresConnectorTask extends BaseSourceTask {
     public void commit() throws InterruptedException {
         if (running.get()) {
             Long fullyProcessedLsn = pendingLsnStore.getFullyProcessedLsn();
+            // If the LSN hasn't changed, and it's been over the idle timeout since the last change, stop the connector so it can be restarted
+            if(fullyProcessedLsn == lastCommittedLsn && Duration.between(lastCommittedLsnTime, LocalDateTime.now()).toMillis() > this.idleLsnTimeoutMillis) {
+                logger.error("[LSN_DEBUG] Stopping connector because LSN has not changed in {}ms {}: {}", this.idleLsnTimeoutMillis, taskName, (fullyProcessedLsn != null ? LogSequenceNumber.valueOf(fullyProcessedLsn) : ""));
+                this.stop();
+            } else if (fullyProcessedLsn != lastCommittedLsn){
+                // If it has change, update the lastCommitted values
+                lastCommittedLsn = fullyProcessedLsn;
+                lastCommittedLsnTime = LocalDateTime.now();
+            }
+
+            // Commit the LSN if not null
             if (fullyProcessedLsn != null) {
-                // If the LSN hasn't changed, and it's been over the idle timeout since the last change, stop the connector so it can be restarted
-                if(fullyProcessedLsn == lastCommittedLsn && Duration.between(lastCommittedLsnTime, LocalDateTime.now()).toMillis() > this.idleLsnTimeoutMillis) {
-                    logger.error("[LSN_DEBUG] Stopping connector because LSN has not changed in {}ms {}: {}", this.idleLsnTimeoutMillis, taskName, LogSequenceNumber.valueOf(fullyProcessedLsn));
-                    this.stop();
-                } else {
-                    lastCommittedLsn = fullyProcessedLsn;
-                    lastCommittedLsnTime = LocalDateTime.now();
-                }
                 logger.info("[LSN_DEBUG] Committing the largest fully processed LSN so far for connector {}: {}", taskName, LogSequenceNumber.valueOf(fullyProcessedLsn));
                 producer.commit(fullyProcessedLsn);
             } else {
-                logger.info("[LSN_DEBUG] commit called without any new records");
+                logger.info("[LSN_DEBUG] commit called without any new records for connector {}", taskName);
             }
         }
     }
